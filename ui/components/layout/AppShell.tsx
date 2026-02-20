@@ -6,15 +6,32 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Sidebar } from "./Sidebar";
 import { NewProjectModal } from "@/components/ui/NewProjectModal";
-import { MOCK_PROJECTS } from "@/lib/mock";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [showNewProject, setShowNewProject] = useState(false);
 
-  function handleCreateProject(title: string, format: "markdown" | "latex") {
-    setShowNewProject(false);
-    router.push(`/project/${MOCK_PROJECTS[0].id}`);
+  async function handleCreateProject(title: string, format: "markdown" | "latex") {
+    try {
+      const response = await fetch("/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, format }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        if (response.status === 401) {
+          router.push("/login");
+          return;
+        }
+        throw new Error(data.error || "Failed to create project.");
+      }
+
+      setShowNewProject(false);
+      router.push(`/project/${data.project.id}`);
+    } catch (error) {
+      console.error(error);
+    }
   }
 
   return (

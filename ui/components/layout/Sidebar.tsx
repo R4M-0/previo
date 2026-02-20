@@ -12,12 +12,12 @@ import {
   FileText,
   Hash,
   LogOut,
-  User,
+  User as UserIcon,
   LayoutGrid,
   Clock,
 } from "lucide-react";
-import { MOCK_PROJECTS, MOCK_USER, formatRelativeDate } from "@/lib/mock";
-import { Project } from "@/types";
+import { formatRelativeDate } from "@/lib/date";
+import { Project, User as AppUser } from "@/types";
 
 interface SidebarProps {
   onNewProject?: () => void;
@@ -65,7 +65,27 @@ export function Sidebar({ onNewProject }: SidebarProps) {
   const router = useRouter();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [user, setUser] = useState<AppUser | null>(null);
   const profileRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    async function loadData() {
+      try {
+        const [projectsRes, meRes] = await Promise.all([
+          fetch("/api/projects"),
+          fetch("/api/me"),
+        ]);
+        const projectsData = await projectsRes.json();
+        const meData = await meRes.json();
+        if (projectsRes.ok) setProjects(projectsData.projects || []);
+        if (meRes.ok) setUser(meData.user || null);
+      } catch {
+        // Keep sidebar functional even if API requests fail.
+      }
+    }
+    void loadData();
+  }, []);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -77,12 +97,20 @@ export function Sidebar({ onNewProject }: SidebarProps) {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const initials = MOCK_USER.name
+  const initials = (user?.name || "User")
     .split(" ")
-    .map((n) => n[0])
+    .map((n: string) => n[0])
     .join("")
     .toUpperCase()
     .slice(0, 2);
+
+  async function handleSignOut() {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } finally {
+      router.push("/login");
+    }
+  }
 
   return (
     <aside
@@ -152,7 +180,7 @@ export function Sidebar({ onNewProject }: SidebarProps) {
 
       {/* Project list */}
       <nav className="flex-1 overflow-y-auto px-2.5 space-y-0.5 pb-2">
-        {MOCK_PROJECTS.map((project) => (
+        {projects.map((project) => (
           <ProjectItem
             key={project.id}
             project={project}
@@ -175,8 +203,8 @@ export function Sidebar({ onNewProject }: SidebarProps) {
             </div>
             {!isCollapsed && (
               <div className="min-w-0 flex-1 text-left">
-                <p className="text-xs font-semibold text-ink truncate">{MOCK_USER.name}</p>
-                <p className="text-[10px] text-stone-400 truncate">{MOCK_USER.email}</p>
+                <p className="text-xs font-semibold text-ink truncate">{user?.name || "User"}</p>
+                <p className="text-[10px] text-stone-400 truncate">{user?.email || "user@previo.app"}</p>
               </div>
             )}
           </button>
@@ -191,13 +219,13 @@ export function Sidebar({ onNewProject }: SidebarProps) {
                 className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-stone-600 hover:bg-stone-50 hover:text-ink transition-colors"
                 onClick={() => setProfileOpen(false)}
               >
-                <User className="w-3.5 h-3.5" />
+                <UserIcon className="w-3.5 h-3.5" />
                 Profile
               </button>
               <div className="h-px bg-stone-100 my-1" />
               <button
                 className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-red-500 hover:bg-red-50 transition-colors"
-                onClick={() => router.push("/login")}
+                onClick={handleSignOut}
               >
                 <LogOut className="w-3.5 h-3.5" />
                 Sign out

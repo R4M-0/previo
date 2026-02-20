@@ -18,12 +18,12 @@ import {
   Loader2,
   Wifi,
   WifiOff,
+  Download,
+  AlertCircle,
 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { CollaboratorModal } from "@/components/ui/CollaboratorModal";
-import { MOCK_PROJECTS, MOCK_COLLABORATORS } from "@/lib/mock";
-import { renderMarkdown, renderLatex } from "@/lib/renderer";
-import { Project, Collaborator } from "@/types";
+import { Collaborator, Project } from "@/types";
 
 // ── Resizable divider ─────────────────────────────────────────────────────────
 function ResizeDivider({ onResize }: { onResize: (delta: number) => void }) {
@@ -97,41 +97,154 @@ export default function ProjectEditorPage() {
   const router = useRouter();
   const projectId = params.id as string;
 
-  const project = MOCK_PROJECTS.find((p) => p.id === projectId) ?? MOCK_PROJECTS[0];
-
-  const [content, setContent] = useState(project.content ?? "");
-  const [format, setFormat] = useState<"markdown" | "latex">(project.format);
+  const [project, setProject] = useState<Project | null>(null);
+  const [content, setContent] = useState("");
+  const [format, setFormat] = useState<"markdown" | "latex">("markdown");
   const [previewHtml, setPreviewHtml] = useState("");
+  const [latexPreviewUrl, setLatexPreviewUrl] = useState("");
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
   const [isSaved, setIsSaved] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isDownloadingFile, setIsDownloadingFile] = useState(false);
   const [showPreview, setShowPreview] = useState(true);
   const [showCollabModal, setShowCollabModal] = useState(false);
   const [showFormatMenu, setShowFormatMenu] = useState(false);
-  const [collaborators, setCollaborators] = useState<Collaborator[]>(project.collaborators);
+  const [collaborators, setCollaborators] = useState<Collaborator[]>([]);
   const [editorWidthPct, setEditorWidthPct] = useState(50);
   const [isConnected, setIsConnected] = useState(true);
+  const [isLoadingProject, setIsLoadingProject] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const formatMenuRef = useRef<HTMLDivElement>(null);
+  const previewRequestIdRef = useRef(0);
+  const skipNextDirtyRef = useRef(false);
 
   const renderPreview = useCallback(
-    (src: string, fmt: "markdown" | "latex") => {
-      const rendered = fmt === "markdown" ? renderMarkdown(src) : renderLatex(src);
-      setPreviewHtml(rendered);
+    async (src: string, fmt: "markdown" | "latex") => {
+      if (fmt === "markdown") {
+        const requestId = ++previewRequestIdRef.current;
+        setPreviewHtml("");
+        setPreviewError(null);
+        setLatexPreviewUrl("");
+        setIsPreviewLoading(true);
+
+        try {
+          const response = await fetch("/api/markdown/preview", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ markdown: src }),
+          });
+          const data = await response.json();
+
+          if (!response.ok) {
+            throw new Error(data.error || "Failed to generate preview.");
+          }
+
+          if (requestId !== previewRequestIdRef.current) {
+            return;
+          }
+
+          setPreviewHtml(data.html || "");
+        } catch (error) {
+          if (requestId !== previewRequestIdRef.current) {
+            return;
+          }
+          setPreviewHtml("");
+          setPreviewError(
+            error instanceof Error ? error.message : "Failed to generate preview."
+          );
+        } finally {
+          if (requestId === previewRequestIdRef.current) {
+            setIsPreviewLoading(false);
+          }
+        }
+        return;
+      }
+
+      const requestId = ++previewRequestIdRef.current;
+      setPreviewHtml("");
+      setPreviewError(null);
+      setIsPreviewLoading(true);
+
+      try {
+        const response = await fetch("/api/latex/preview", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ latex: src }),
+        });
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || "Failed to generate preview.");
+        }
+
+        if (requestId !== previewRequestIdRef.current) {
+          return;
+        }
+
+        setLatexPreviewUrl(data.pdfDataUrl || "");
+      } catch (error) {
+        if (requestId !== previewRequestIdRef.current) {
+          return;
+        }
+        setLatexPreviewUrl("");
+        setPreviewError(
+          error instanceof Error ? error.message : "Failed to generate preview."
+        );
+      } finally {
+        if (requestId === previewRequestIdRef.current) {
+          setIsPreviewLoading(false);
+        }
+      }
     },
     []
   );
 
   useEffect(() => {
-    renderPreview(content, format);
-  }, []);
+    async function loadProject() {
+      setIsLoadingProject(true);
+      try {
+        const response = await fetch(`/api/projects/${projectId}`);
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error || "Failed to load project.");
+        }
+
+        const loadedProject = data.project as Project;
+        setProject(loadedProject);
+        setContent(loadedProject.content ?? "");
+        setFormat(loadedProject.format);
+        setCollaborators(loadedProject.collaborators || []);
+        setIsSaved(true);
+        skipNextDirtyRef.current = true;
+      } catch (error) {
+        setPreviewError(error instanceof Error ? error.message : "Failed to load project.");
+      } finally {
+        setIsLoadingProject(false);
+      }
+    }
+
+    void loadProject();
+  }, [projectId]);
 
   useEffect(() => {
+    if (!isLoadingProject) {
+      void renderPreview(content, format);
+    }
+  }, [isLoadingProject, renderPreview]);
+
+  useEffect(() => {
+    if (isLoadingProject) return;
+    if (skipNextDirtyRef.current) {
+      skipNextDirtyRef.current = false;
+      return;
+    }
     if (debounceRef.current) clearTimeout(debounceRef.current);
     setIsSaved(false);
     debounceRef.current = setTimeout(() => {
-      renderPreview(content, format);
+      void renderPreview(content, format);
     }, format === "markdown" ? 150 : 800);
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [content, format, renderPreview]);
@@ -147,10 +260,25 @@ export default function ProjectEditorPage() {
   }, []);
 
   async function handleSave() {
+    if (!project) return;
     setIsSaving(true);
-    await new Promise((r) => setTimeout(r, 600));
-    setIsSaving(false);
-    setIsSaved(true);
+    try {
+      const response = await fetch(`/api/projects/${project.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content, format }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to save project.");
+      }
+      setProject(data.project as Project);
+      setIsSaved(true);
+    } catch (error) {
+      setPreviewError(error instanceof Error ? error.message : "Failed to save project.");
+    } finally {
+      setIsSaving(false);
+    }
   }
 
   useEffect(() => {
@@ -171,22 +299,76 @@ export default function ProjectEditorPage() {
     setEditorWidthPct((prev) => Math.max(20, Math.min(80, prev + deltaPct)));
   }
 
-  function handleAddCollaborator(email: string) {
-    const newCollab: Collaborator = {
-      id: `c_${Date.now()}`,
-      name: email.split("@")[0],
-      email,
-      color: ["#E07B54", "#5B8DD9", "#56B870", "#9B6DD4", "#E0A854"][
-        Math.floor(Math.random() * 5)
-      ],
-    };
-    setCollaborators((prev) => [...prev, newCollab]);
+  async function handleAddCollaborator(email: string) {
+    if (!project) return;
+    try {
+      const response = await fetch(`/api/projects/${project.id}/collaborators`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to add collaborator.");
+      }
+
+      const collaborator = data.collaborator as Collaborator;
+      setCollaborators((prev) => {
+        if (prev.some((c) => c.id === collaborator.id)) return prev;
+        return [...prev, collaborator];
+      });
+    } catch (error) {
+      setPreviewError(
+        error instanceof Error ? error.message : "Failed to add collaborator."
+      );
+    }
   }
 
   function handleFormatSwitch(newFormat: "markdown" | "latex") {
     setFormat(newFormat);
     setShowFormatMenu(false);
-    renderPreview(content, newFormat);
+    void renderPreview(content, newFormat);
+  }
+
+  async function handleDownload() {
+    if (!content.trim()) return;
+
+    setIsDownloadingFile(true);
+    try {
+      const endpoint = format === "latex" ? "/api/latex/render" : "/api/markdown/render";
+      const payload =
+        format === "latex"
+          ? { latex: content, filename: project?.title || "document" }
+          : { markdown: content, filename: project?.title || "document" };
+      const extension = format === "latex" ? "pdf" : "html";
+
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to render document.");
+      }
+
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = objectUrl;
+      anchor.download = `${project?.title || "document"}.${extension}`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch (error) {
+      setPreviewError(
+        error instanceof Error ? error.message : "Failed to render document."
+      );
+    } finally {
+      setIsDownloadingFile(false);
+    }
   }
 
   const editorPlaceholder =
@@ -208,7 +390,7 @@ export default function ProjectEditorPage() {
               <ArrowLeft className="w-4 h-4" />
             </button>
             <h1 className="text-sm font-semibold text-ink truncate max-w-[300px]">
-              {project.title}
+              {project?.title || "Project"}
             </h1>
 
             {/* Format selector */}
@@ -312,17 +494,30 @@ export default function ProjectEditorPage() {
               <span className="hidden sm:inline">{showPreview ? "Hide" : "Preview"}</span>
             </button>
 
-            <button
-              onClick={handleSave}
-              disabled={isSaving || isSaved}
-              className="flex items-center gap-1.5 bg-ink text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-stone-800 disabled:opacity-50 transition-all"
-            >
+              <button
+                onClick={handleSave}
+                disabled={isSaving || isSaved || isLoadingProject}
+                className="flex items-center gap-1.5 bg-ink text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-stone-800 disabled:opacity-50 transition-all"
+              >
               {isSaving ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
               ) : (
                 <Save className="w-3.5 h-3.5" />
               )}
               Save
+            </button>
+
+            <button
+              onClick={handleDownload}
+              disabled={isDownloadingFile || !content.trim() || isLoadingProject}
+              className="flex items-center gap-1.5 border border-stone-200 text-stone-700 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-stone-50 disabled:opacity-50 transition-all"
+            >
+              {isDownloadingFile ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Download className="w-3.5 h-3.5" />
+              )}
+              {format === "latex" ? "PDF" : "HTML"}
             </button>
           </div>
         </header>
@@ -354,6 +549,7 @@ export default function ProjectEditorPage() {
                 onChange={(e) => setContent(e.target.value)}
                 placeholder={editorPlaceholder}
                 className="editor-textarea"
+                disabled={isLoadingProject}
                 spellCheck={false}
                 autoComplete="off"
                 autoCorrect="off"
@@ -380,19 +576,46 @@ export default function ProjectEditorPage() {
             >
               <div className="flex items-center justify-between px-4 py-1.5 border-b border-stone-200 bg-white flex-shrink-0">
                 <span className="text-xs text-stone-400 font-mono">preview</span>
-                {format === "latex" && (
-                  <span className="text-[10px] font-mono text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
-                    mock render
-                  </span>
-                )}
+                <span
+                  className={`text-[10px] font-mono border px-2 py-0.5 rounded-full ${
+                    format === "latex"
+                      ? "text-amber-600 bg-amber-50 border-amber-200"
+                      : "text-stone-600 bg-stone-100 border-stone-200"
+                  }`}
+                >
+                  backend render
+                </span>
               </div>
 
               <div className="flex-1 overflow-auto bg-white">
-                <div className="max-w-2xl mx-auto px-8 py-8">
-                  {previewHtml ? (
+                <div className={format === "markdown" ? "max-w-2xl mx-auto px-8 py-8" : "h-full"}>
+                  {isPreviewLoading ? (
+                    <div className="flex flex-col items-center justify-center h-full min-h-40 text-stone-400">
+                      <Loader2 className="w-7 h-7 animate-spin mb-2" />
+                      <p className="text-sm">
+                        {format === "latex"
+                          ? "Compiling LaTeX preview…"
+                          : "Rendering Markdown preview…"}
+                      </p>
+                    </div>
+                  ) : format === "markdown" && previewHtml ? (
                     <div
                       className="preview-content"
                       dangerouslySetInnerHTML={{ __html: previewHtml }}
+                    />
+                  ) : previewError ? (
+                    <div className="max-w-2xl mx-auto px-8 py-8 text-red-600">
+                      <div className="inline-flex items-center gap-2 text-sm font-semibold mb-2">
+                        <AlertCircle className="w-4 h-4" />
+                        Preview failed
+                      </div>
+                      <p className="text-sm whitespace-pre-wrap">{previewError}</p>
+                    </div>
+                  ) : format === "latex" && latexPreviewUrl ? (
+                    <iframe
+                      src={latexPreviewUrl}
+                      title="LaTeX preview"
+                      className="w-full h-full border-0"
                     />
                   ) : (
                     <div className="flex flex-col items-center justify-center h-40 text-stone-300">

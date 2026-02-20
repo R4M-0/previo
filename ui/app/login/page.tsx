@@ -4,11 +4,12 @@
 
 import { useState, FormEvent } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Eye, EyeOff, ArrowRight, Loader2 } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -20,13 +21,21 @@ export default function LoginPage() {
     setError("");
     setIsLoading(true);
 
-    // Mock authentication — replace with real API call
-    await new Promise((res) => setTimeout(res, 900));
-
-    if (email && password.length >= 6) {
-      router.push("/dashboard");
-    } else {
-      setError("Invalid credentials. Try any email with 6+ char password.");
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Invalid credentials.");
+      }
+      const nextPath = searchParams.get("next");
+      router.push(nextPath || "/dashboard");
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Invalid credentials.");
+    } finally {
       setIsLoading(false);
     }
   }
