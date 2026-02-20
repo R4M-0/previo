@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import path from "node:path";
-import { Collaborator, Project, User } from "@/types";
+import { Collaborator, Project, ProjectVersion, User } from "@/types";
 
 type DbResponse<T> = { ok: true; data: T } | { ok: false; error: string };
 
@@ -131,4 +131,23 @@ export async function updateMe(input: {
   newPassword?: string;
 }): Promise<User> {
   return runDbAction<User>("update_me", input);
+}
+
+export async function listProjectVersions(
+  userId: string,
+  projectId: string
+): Promise<ProjectVersion[]> {
+  return runDbAction<ProjectVersion[]>("list_project_versions", { userId, projectId });
+}
+
+export async function revertProjectVersion(
+  userId: string,
+  projectId: string,
+  versionId: string
+): Promise<Project> {
+  return runDbAction<Project>("revert_project_version", {
+    userId,
+    projectId,
+    versionId,
+  });
 }
