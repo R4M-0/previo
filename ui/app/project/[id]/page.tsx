@@ -20,10 +20,13 @@ import {
   WifiOff,
   Download,
   AlertCircle,
+  History,
+  X,
 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { CollaboratorModal } from "@/components/ui/CollaboratorModal";
-import { Collaborator, Project } from "@/types";
+import { formatRelativeDate } from "@/lib/date";
+import { Collaborator, Project, ProjectVersion } from "@/types";
 
 // ── Resizable divider ─────────────────────────────────────────────────────────
 function ResizeDivider({ onResize }: { onResize: (delta: number) => void }) {
@@ -110,7 +113,13 @@ export default function ProjectEditorPage() {
   const [showPreview, setShowPreview] = useState(true);
   const [showCollabModal, setShowCollabModal] = useState(false);
   const [showFormatMenu, setShowFormatMenu] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   const [collaborators, setCollaborators] = useState<Collaborator[]>([]);
+  const [versions, setVersions] = useState<ProjectVersion[]>([]);
+  const [isLoadingVersions, setIsLoadingVersions] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [isReverting, setIsReverting] = useState(false);
+  const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
   const [editorWidthPct, setEditorWidthPct] = useState(50);
   const [isConnected, setIsConnected] = useState(true);
   const [isLoadingProject, setIsLoadingProject] = useState(true);
@@ -330,6 +339,65 @@ export default function ProjectEditorPage() {
     void renderPreview(content, newFormat);
   }
 
+  async function loadVersions() {
+    if (!project) return;
+    setIsLoadingVersions(true);
+    setHistoryError(null);
+    try {
+      const response = await fetch(`/api/projects/${project.id}/versions`);
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to load version history.");
+      }
+      const loadedVersions = (data.versions || []) as ProjectVersion[];
+      setVersions(loadedVersions);
+      if (loadedVersions.length > 0) {
+        setSelectedVersionId((prev) =>
+          prev && loadedVersions.some((v) => v.id === prev) ? prev : loadedVersions[0].id
+        );
+      } else {
+        setSelectedVersionId(null);
+      }
+    } catch (error) {
+      setHistoryError(
+        error instanceof Error ? error.message : "Failed to load version history."
+      );
+    } finally {
+      setIsLoadingVersions(false);
+    }
+  }
+
+  async function handleRevert(versionId: string) {
+    if (!project) return;
+    setIsReverting(true);
+    setHistoryError(null);
+    try {
+      const response = await fetch(`/api/projects/${project.id}/versions/revert`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ versionId }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to revert version.");
+      }
+
+      const reverted = data.project as Project;
+      setProject(reverted);
+      setContent(reverted.content ?? "");
+      setFormat(reverted.format);
+      setIsSaved(true);
+      skipNextDirtyRef.current = true;
+      await loadVersions();
+    } catch (error) {
+      setHistoryError(
+        error instanceof Error ? error.message : "Failed to revert version."
+      );
+    } finally {
+      setIsReverting(false);
+    }
+  }
+
   async function handleDownload() {
     if (!content.trim()) return;
 
@@ -375,6 +443,14 @@ export default function ProjectEditorPage() {
     format === "markdown"
       ? "# Start writing in Markdown\n\nUse **bold**, _italic_, `code`, and more.\n\n## Headings\n\nCreate structure with `#`, `##`, `###`...\n\n```js\nconsole.log('Hello, Previo!');\n```"
       : "\\documentclass{article}\n\\begin{document}\n\n\\section{Introduction}\nStart writing your LaTeX document here...\n\n\\end{document}";
+  const selectedVersion =
+    versions.find((version) => version.id === selectedVersionId) || versions[0] || null;
+
+  useEffect(() => {
+    if (showHistory) {
+      void loadVersions();
+    }
+  }, [showHistory, project?.id]);
 
   return (
     <AppShell>
@@ -494,8 +570,8 @@ export default function ProjectEditorPage() {
               <span className="hidden sm:inline">{showPreview ? "Hide" : "Preview"}</span>
             </button>
 
-              <button
-                onClick={handleSave}
+            <button
+              onClick={handleSave}
                 disabled={isSaving || isSaved || isLoadingProject}
                 className="flex items-center gap-1.5 bg-ink text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-stone-800 disabled:opacity-50 transition-all"
               >
@@ -505,6 +581,14 @@ export default function ProjectEditorPage() {
                 <Save className="w-3.5 h-3.5" />
               )}
               Save
+            </button>
+
+            <button
+              onClick={() => setShowHistory(true)}
+              className="flex items-center gap-1.5 border border-stone-200 text-stone-700 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-stone-50 transition-all"
+            >
+              <History className="w-3.5 h-3.5" />
+              History
             </button>
 
             <button
@@ -636,6 +720,90 @@ export default function ProjectEditorPage() {
           onClose={() => setShowCollabModal(false)}
           onAdd={handleAddCollaborator}
         />
+      )}
+
+      {showHistory && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-ink/30 backdrop-blur-sm animate-fade-in"
+            onClick={() => setShowHistory(false)}
+          />
+
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-4xl h-[80vh] animate-slide-up opacity-0 overflow-hidden" style={{ animationFillMode: "forwards" }}>
+            <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-stone-100">
+              <h2 className="font-display text-xl text-ink">Version history</h2>
+              <button
+                onClick={() => setShowHistory(false)}
+                className="w-7 h-7 flex items-center justify-center rounded-lg text-stone-400 hover:text-ink hover:bg-stone-100 transition-all"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 h-[calc(80vh-72px)]">
+              <div className="border-r border-stone-100 overflow-y-auto p-4 space-y-3">
+                {isLoadingVersions ? (
+                  <div className="flex items-center gap-2 text-sm text-stone-400">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Loading versions...
+                  </div>
+                ) : versions.length === 0 ? (
+                  <p className="text-sm text-stone-400">No versions yet.</p>
+                ) : (
+                  versions.map((version) => (
+                    <div
+                      key={version.id}
+                      onClick={() => setSelectedVersionId(version.id)}
+                      className={`w-full text-left border rounded-lg p-3 transition-colors cursor-pointer ${
+                        selectedVersionId === version.id
+                          ? "border-amber-300 bg-amber-50"
+                          : "border-stone-200 bg-stone-50 hover:border-stone-300"
+                      }`}
+                    >
+                      <p className="text-xs font-semibold text-ink">{version.changeSummary}</p>
+                      <p className="text-[11px] text-stone-500 mt-1">
+                        {version.actor.name} ({version.actor.email})
+                      </p>
+                      <p className="text-[11px] text-stone-400">
+                        {formatRelativeDate(version.createdAt)} - {new Date(version.createdAt).toLocaleString("en-GB")}
+                      </p>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void handleRevert(version.id);
+                        }}
+                        disabled={isReverting}
+                        className="mt-2 text-xs font-medium text-amber-700 hover:text-amber-800 disabled:opacity-50"
+                      >
+                        {isReverting ? "Reverting..." : "Revert to this version"}
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <div className="overflow-y-auto p-4">
+                {historyError && (
+                  <p className="text-xs text-red-500 bg-red-50 border border-red-100 rounded-md px-3 py-2 mb-3">
+                    {historyError}
+                  </p>
+                )}
+                {selectedVersion ? (
+                  <>
+                    <p className="text-xs font-semibold text-stone-500 uppercase tracking-wider mb-2">
+                      Selected version diff
+                    </p>
+                    <pre className="text-[11px] leading-relaxed whitespace-pre-wrap bg-stone-900 text-stone-100 rounded-lg p-3 overflow-x-auto">
+                      {selectedVersion.diffText}
+                    </pre>
+                  </>
+                ) : (
+                  <p className="text-sm text-stone-400">Select a version to inspect its changes.</p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </AppShell>
   );

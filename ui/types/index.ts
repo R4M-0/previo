@@ -22,3 +22,19 @@ export interface Collaborator {
   email: string;
   color: string;
 }
+
+export interface ProjectVersion {
+  id: string;
+  projectId: string;
+  snapshotTitle: string;
+  snapshotFormat: "markdown" | "latex";
+  snapshotContent: string;
+  changeSummary: string;
+  diffText: string;
+  createdAt: string;
+  actor: {
+    id: string;
+    name: string;
+    email: string;
+  };
+}

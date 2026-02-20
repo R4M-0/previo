@@ -6,6 +6,7 @@ SQLite service used by Next.js API routes.
 from __future__ import annotations
 
 import argparse
+import difflib
 import hashlib
 import json
 import secrets
@@ -131,6 +132,20 @@ def migrate(conn: sqlite3.Connection) -> None:
           expires_at TEXT NOT NULL,
           FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
         );
+
+        CREATE TABLE IF NOT EXISTS project_versions (
+          id TEXT PRIMARY KEY,
+          project_id TEXT NOT NULL,
+          actor_user_id TEXT NOT NULL,
+          snapshot_title TEXT NOT NULL,
+          snapshot_format TEXT NOT NULL CHECK (snapshot_format IN ('markdown', 'latex')),
+          snapshot_content TEXT NOT NULL,
+          change_summary TEXT NOT NULL,
+          diff_text TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+          FOREIGN KEY (actor_user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
         """
     )
 
@@ -174,6 +189,33 @@ def migrate(conn: sqlite3.Connection) -> None:
             (hash_password("Password1"), row["id"]),
         )
 
+    conn.commit()
+    seed_initial_versions(conn)
+
+
+def seed_initial_versions(conn: sqlite3.Connection) -> None:
+    rows = conn.execute(
+        """
+        SELECT p.id, p.owner_id, p.title, p.format, p.content
+        FROM projects p
+        LEFT JOIN project_versions pv ON pv.project_id = p.id
+        GROUP BY p.id
+        HAVING COUNT(pv.id) = 0
+        """
+    ).fetchall()
+    for row in rows:
+        create_version_entry(
+            conn,
+            project_id=row["id"],
+            actor_user_id=row["owner_id"],
+            new_title=row["title"],
+            new_format=row["format"],
+            new_content=row["content"],
+            old_title="",
+            old_format=row["format"],
+            old_content="",
+            explicit_summary="Initial version",
+        )
     conn.commit()
 
 
@@ -234,6 +276,20 @@ def seed_if_empty(conn: sqlite3.Connection) -> None:
         """,
         [("p1", "c1"), ("p1", "c2"), ("p2", "c3")],
     )
+    for project in projects:
+        project_id, owner_id, title, fmt, content, _updated_at = project
+        create_version_entry(
+            conn,
+            project_id=project_id,
+            actor_user_id=owner_id,
+            new_title=title,
+            new_format=fmt,
+            new_content=content,
+            old_title="",
+            old_format=fmt,
+            old_content="",
+            explicit_summary="Initial version",
+        )
     conn.commit()
 
 
@@ -400,6 +456,83 @@ def project_row_to_dict(conn: sqlite3.Connection, row: sqlite3.Row) -> dict[str,
     return project
 
 
+def build_diff_text(old_content: str, new_content: str) -> str:
+    old_lines = old_content.splitlines()
+    new_lines = new_content.splitlines()
+    diff_lines = list(
+        difflib.unified_diff(
+            old_lines,
+            new_lines,
+            fromfile="before",
+            tofile="after",
+            lineterm="",
+            n=3,
+        )
+    )
+    return "\n".join(diff_lines) if diff_lines else "No content changes."
+
+
+def build_change_summary(
+    old_title: str,
+    old_format: str,
+    old_content: str,
+    new_title: str,
+    new_format: str,
+    new_content: str,
+) -> str:
+    changes: list[str] = []
+    if old_title != new_title:
+        changes.append("title")
+    if old_format != new_format:
+        changes.append("format")
+    if old_content != new_content:
+        changes.append("content")
+    if not changes:
+        return "No changes"
+    joined = ", ".join(changes)
+    return f"Updated {joined}"
+
+
+def create_version_entry(
+    conn: sqlite3.Connection,
+    *,
+    project_id: str,
+    actor_user_id: str,
+    new_title: str,
+    new_format: str,
+    new_content: str,
+    old_title: str,
+    old_format: str,
+    old_content: str,
+    explicit_summary: str | None = None,
+) -> None:
+    version_id = f"v_{uuid.uuid4().hex[:10]}"
+    summary = explicit_summary or build_change_summary(
+        old_title, old_format, old_content, new_title, new_format, new_content
+    )
+    diff_text = build_diff_text(old_content, new_content)
+    conn.execute(
+        """
+        INSERT INTO project_versions (
+          id, project_id, actor_user_id, snapshot_title, snapshot_format, snapshot_content,
+          change_summary, diff_text, created_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            version_id,
+            project_id,
+            actor_user_id,
+            new_title,
+            new_format,
+            new_content,
+            summary,
+            diff_text,
+            now_iso(),
+        ),
+    )
+
+
 def list_projects(conn: sqlite3.Connection, user_id: str, query: str = "") -> list[dict[str, Any]]:
     if not user_id:
         raise ValueError("Missing required field: userId")
@@ -460,6 +593,18 @@ def create_project(conn: sqlite3.Connection, payload: dict[str, Any]) -> dict[st
         """,
         (project_id, user_id, title, fmt, content, updated_at),
     )
+    create_version_entry(
+        conn,
+        project_id=project_id,
+        actor_user_id=user_id,
+        new_title=title,
+        new_format=fmt,
+        new_content=content,
+        old_title="",
+        old_format=fmt,
+        old_content="",
+        explicit_summary="Initial version",
+    )
     conn.commit()
     project = get_project(conn, user_id, project_id)
     if project is None:
@@ -479,11 +624,18 @@ def update_project(conn: sqlite3.Connection, payload: dict[str, Any]) -> dict[st
     if project is None:
         raise ValueError("Project not found")
 
-    title = payload.get("title", project["title"])
-    fmt = payload.get("format", project["format"])
-    content = payload.get("content", project["content"])
+    title = str(payload.get("title", project["title"]))
+    fmt = str(payload.get("format", project["format"]))
+    content = str(payload.get("content", project["content"]))
     if fmt not in ("markdown", "latex"):
         raise ValueError("Invalid format. Expected 'markdown' or 'latex'.")
+
+    if (
+        title == project["title"]
+        and fmt == project["format"]
+        and content == project["content"]
+    ):
+        return project
 
     conn.execute(
         """
@@ -491,7 +643,18 @@ def update_project(conn: sqlite3.Connection, payload: dict[str, Any]) -> dict[st
         SET title = ?, format = ?, content = ?, updated_at = ?
         WHERE id = ? AND owner_id = ?
         """,
-        (str(title), str(fmt), str(content), now_iso(), project_id, user_id),
+        (title, fmt, content, now_iso(), project_id, user_id),
+    )
+    create_version_entry(
+        conn,
+        project_id=project_id,
+        actor_user_id=user_id,
+        new_title=title,
+        new_format=fmt,
+        new_content=content,
+        old_title=project["title"],
+        old_format=project["format"],
+        old_content=project["content"],
     )
     conn.commit()
     updated = get_project(conn, user_id, project_id)
@@ -552,6 +715,114 @@ def add_collaborator(conn: sqlite3.Connection, payload: dict[str, Any]) -> dict[
     )
     conn.commit()
     return collaborator
+
+
+def list_project_versions(
+    conn: sqlite3.Connection, user_id: str, project_id: str
+) -> list[dict[str, Any]]:
+    if get_project(conn, user_id, project_id) is None:
+        raise ValueError("Project not found")
+
+    rows = conn.execute(
+        """
+        SELECT
+          pv.id,
+          pv.project_id,
+          pv.snapshot_title,
+          pv.snapshot_format,
+          pv.snapshot_content,
+          pv.change_summary,
+          pv.diff_text,
+          pv.created_at,
+          u.id AS actor_id,
+          u.name AS actor_name,
+          u.email AS actor_email
+        FROM project_versions pv
+        INNER JOIN users u ON u.id = pv.actor_user_id
+        WHERE pv.project_id = ?
+        ORDER BY datetime(pv.created_at) DESC
+        """,
+        (project_id,),
+    ).fetchall()
+
+    versions: list[dict[str, Any]] = []
+    for row in rows:
+        versions.append(
+            {
+                "id": row["id"],
+                "projectId": row["project_id"],
+                "snapshotTitle": row["snapshot_title"],
+                "snapshotFormat": row["snapshot_format"],
+                "snapshotContent": row["snapshot_content"],
+                "changeSummary": row["change_summary"],
+                "diffText": row["diff_text"],
+                "createdAt": row["created_at"],
+                "actor": {
+                    "id": row["actor_id"],
+                    "name": row["actor_name"],
+                    "email": row["actor_email"],
+                },
+            }
+        )
+    return versions
+
+
+def revert_project_version(conn: sqlite3.Connection, payload: dict[str, Any]) -> dict[str, Any]:
+    user_id = str(payload.get("userId", "")).strip()
+    project_id = str(payload.get("projectId", "")).strip()
+    version_id = str(payload.get("versionId", "")).strip()
+    if not user_id:
+        raise ValueError("Missing required field: userId")
+    if not project_id or not version_id:
+        raise ValueError("Missing required fields: projectId, versionId")
+
+    current = get_project(conn, user_id, project_id)
+    if current is None:
+        raise ValueError("Project not found")
+
+    version = conn.execute(
+        """
+        SELECT id, snapshot_title, snapshot_format, snapshot_content
+        FROM project_versions
+        WHERE id = ? AND project_id = ?
+        """,
+        (version_id, project_id),
+    ).fetchone()
+    if version is None:
+        raise ValueError("Version not found")
+
+    conn.execute(
+        """
+        UPDATE projects
+        SET title = ?, format = ?, content = ?, updated_at = ?
+        WHERE id = ? AND owner_id = ?
+        """,
+        (
+            version["snapshot_title"],
+            version["snapshot_format"],
+            version["snapshot_content"],
+            now_iso(),
+            project_id,
+            user_id,
+        ),
+    )
+    create_version_entry(
+        conn,
+        project_id=project_id,
+        actor_user_id=user_id,
+        new_title=version["snapshot_title"],
+        new_format=version["snapshot_format"],
+        new_content=version["snapshot_content"],
+        old_title=current["title"],
+        old_format=current["format"],
+        old_content=current["content"],
+        explicit_summary=f"Reverted to version {version_id}",
+    )
+    conn.commit()
+    reverted = get_project(conn, user_id, project_id)
+    if reverted is None:
+        raise RuntimeError("Failed to revert project")
+    return reverted
 
 
 def parse_args() -> argparse.Namespace:
@@ -615,6 +886,14 @@ def main() -> int:
             data = add_collaborator(conn, payload)
         elif action == "update_me":
             data = update_me(conn, payload)
+        elif action == "list_project_versions":
+            data = list_project_versions(
+                conn,
+                str(payload.get("userId", "")).strip(),
+                str(payload.get("projectId", "")).strip(),
+            )
+        elif action == "revert_project_version":
+            data = revert_project_version(conn, payload)
         else:
             raise ValueError(f"Unknown action: {action}")
 
