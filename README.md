@@ -6,6 +6,8 @@ Collaborative Markdown + LaTeX writing platform with:
 - live preview/rendering (Markdown + LaTeX)
 - version history with revert
 - invitation workflow (accept/deny)
+- save comments in version history
+- near-real-time collaborator sync (no manual refresh on saved updates)
 
 ## Project Structure
 
@@ -37,6 +39,7 @@ previo/
 - npm
 - Python 3.10+
 - LaTeX compiler (`pdflatex`) available in PATH
+- Docker + Docker Compose (optional)
 
 ## Setup
 
@@ -80,6 +83,18 @@ npm run dev
 
 Open `http://localhost:3000`.
 
+## Run with Docker
+
+```bash
+docker compose up --build
+```
+
+Open `http://localhost:3000`.
+
+Notes:
+- The UI container runs Next.js and invokes Python backend scripts locally.
+- SQLite is persisted in `backend/data`.
+
 ## OAuth Callback URLs
 
 Configure these in provider dashboards:
@@ -96,13 +111,16 @@ Configure these in provider dashboards:
 - Projects:
   - Create/edit markdown and latex docs
   - Search projects by title/content/format
+  - Delete owned projects from dashboard
 - Collaboration:
   - Invite by email
   - Recipient receives invite notification
   - Accept/Deny invite
   - Shared project access for accepted members
+  - Auto-sync of saved changes in open collaborator editors
 - Version Control:
   - Version snapshot on project updates
+  - Optional save comment shown in history entries
   - History panel showing who/when/what changed
   - Unified diff view
   - Revert to any previous version
@@ -118,4 +136,4 @@ Configure these in provider dashboards:
 - SQLite DB file is `backend/data/previo.db`.
 - If you change DB schema logic, restart the app and re-run flows to verify migration paths.
 - Rotate OAuth secrets if they were shared in plain text.
-
+- For production images, `ui/next.config.js` is configured with `output: "standalone"`.
