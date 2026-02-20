@@ -1,0 +1,27 @@
+services:
+  ui:
+    build:
+      context: ./ui
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    volumes:
+      # Mount backend scripts so the UI can spawn them via child_process.
+      # Resolves to /app/backend inside the container (../backend relative to /app/ui).
+      - ./backend:/app/backend
+      # Persist the SQLite database across container restarts
+      - previo_db:/app/backend/data
+    environment:
+      NODE_ENV: production
+      # Public app URL used for OAuth redirect URIs
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+      # Google OAuth
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      # GitHub OAuth
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+    restart: unless-stopped
+
+volumes:
+  previo_db:
