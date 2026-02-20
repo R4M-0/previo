@@ -60,9 +60,6 @@ export default function LoginPage() {
           <span className="font-display text-2xl text-white tracking-tight">
             Previo
           </span>
-          <span className="ml-2 text-xs text-stone-500 font-mono uppercase tracking-widest">
-            v1.0
-          </span>
         </div>
 
         <div className="relative z-10 space-y-6">
@@ -77,14 +74,6 @@ export default function LoginPage() {
         </div>
 
         <div className="relative z-10 flex items-center gap-3">
-          {["OM", "GN", "LD"].map((initials, i) => (
-            <div
-              key={i}
-              className="w-8 h-8 rounded-full bg-stone-700 border border-stone-600 flex items-center justify-center"
-            >
-              <span className="text-xs text-stone-300 font-mono">{initials}</span>
-            </div>
-          ))}
           <span className="text-stone-500 text-xs ml-1">
             Built by the Previo team
           </span>

@@ -2,6 +2,7 @@
 
 import type { Metadata } from "next";
 import "./globals.css";
+import { ThemeInitializer } from "@/components/theme/ThemeInitializer";
 
 export const metadata: Metadata = {
   title: "Previo — Collaborative Editor",
@@ -15,7 +16,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className="bg-canvas text-ink antialiased">{children}</body>
+      <body className="bg-canvas text-ink antialiased">
+        <ThemeInitializer />
+        {children}
+      </body>
     </html>
   );
 }
