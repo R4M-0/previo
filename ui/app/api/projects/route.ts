@@ -2,10 +2,12 @@ import { NextResponse } from "next/server";
 import { createProject, listProjects } from "@/lib/server/db";
 import { requireAuthUser } from "@/lib/server/auth";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const user = await requireAuthUser();
-    const projects = await listProjects(user.id);
+    const { searchParams } = new URL(request.url);
+    const query = searchParams.get("q") || "";
+    const projects = await listProjects(user.id, query);
     return NextResponse.json({ projects });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to fetch projects.";

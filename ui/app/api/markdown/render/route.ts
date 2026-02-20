@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { renderMarkdownHtml } from "@/lib/server/markdown";
+import { requireAuthUser } from "@/lib/server/auth";
 
 function makeSafeFilename(input?: string): string {
   const base = (input || "document").trim().toLowerCase();
@@ -9,6 +10,7 @@ function makeSafeFilename(input?: string): string {
 
 export async function POST(request: Request) {
   try {
+    await requireAuthUser();
     const body = (await request.json()) as { markdown?: string; filename?: string };
     const markdown = typeof body.markdown === "string" ? body.markdown : "";
     const filename = makeSafeFilename(body.filename);
@@ -31,7 +33,7 @@ export async function POST(request: Request) {
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Failed to render Markdown HTML.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    const status = message.toLowerCase().includes("unauthorized") ? 401 : 500;
+    return NextResponse.json({ error: message }, { status });
   }
 }
-

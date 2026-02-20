@@ -10,11 +10,13 @@ import {
   FolderOpen,
   Hash,
   Clock,
-  Users,
   ArrowUpRight,
   FileCode2,
+  Search,
+  BarChart3,
+  Activity,
 } from "lucide-react";
-import { AppShell } from "@/components/layout/AppShell";
+import { AppShell, useAppShellActions } from "@/components/layout/AppShell";
 import { formatRelativeDate } from "@/lib/date";
 import { Project, User } from "@/types";
 
@@ -83,28 +85,48 @@ function ProjectCard({ project }: { project: Project }) {
   );
 }
 
-export default function DashboardPage() {
-  const router = useRouter();
+function DashboardContent() {
+  const { openNewProject } = useAppShellActions();
   const [projects, setProjects] = useState<Project[]>([]);
   const [user, setUser] = useState<User | null>(null);
+  const [search, setSearch] = useState("");
+  const [isLoadingProjects, setIsLoadingProjects] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    async function loadData() {
+    async function loadUser() {
       try {
-        const [projectsRes, meRes] = await Promise.all([
-          fetch("/api/projects"),
-          fetch("/api/me"),
-        ]);
-        const projectsData = await projectsRes.json();
+        const meRes = await fetch("/api/me");
         const meData = await meRes.json();
-        if (projectsRes.ok) setProjects(projectsData.projects || []);
-        if (meRes.ok) setUser(meData.user || null);
-      } catch {
-        // Keep the dashboard rendered with empty state.
+        if (!meRes.ok) {
+          throw new Error(meData.error || "Failed to load user.");
+        }
+        setUser(meData.user || null);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed to load user.");
       }
     }
-    void loadData();
+    void loadUser();
   }, []);
+
+  useEffect(() => {
+    const timeout = setTimeout(async () => {
+      setIsLoadingProjects(true);
+      try {
+        const projectsRes = await fetch(`/api/projects?q=${encodeURIComponent(search)}`);
+        const projectsData = await projectsRes.json();
+        if (!projectsRes.ok) {
+          throw new Error(projectsData.error || "Failed to load projects.");
+        }
+        setProjects(projectsData.projects || []);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed to load projects.");
+      } finally {
+        setIsLoadingProjects(false);
+      }
+    }, 250);
+    return () => clearTimeout(timeout);
+  }, [search]);
 
   const firstName = user?.name?.split(" ")[0] || "Writer";
   const latestProject = projects[0];
@@ -114,11 +136,16 @@ export default function DashboardPage() {
   const totalCollabs = new Set(
     projects.flatMap((p) => p.collaborators.map((c) => c.id))
   ).size;
+  const totalWords = projects.reduce((acc, p) => {
+    const text = p.content || "";
+    return acc + (text.trim() ? text.trim().split(/\s+/).length : 0);
+  }, 0);
+  const averageWords =
+    projects.length > 0 ? Math.round(totalWords / projects.length).toLocaleString() : "0";
 
   return (
-    <AppShell>
-      <div className="h-full overflow-y-auto">
-        <div className="max-w-4xl mx-auto px-8 py-10">
+    <div className="h-full overflow-y-auto">
+      <div className="max-w-4xl mx-auto px-8 py-10">
           {/* Header */}
           <div className="mb-10 animate-fade-in opacity-0" style={{ animationFillMode: "forwards" }}>
             <p className="text-sm text-stone-400 font-mono mb-1">
@@ -135,6 +162,12 @@ export default function DashboardPage() {
               Pick up where you left off, or start something new.
             </p>
           </div>
+
+          {error && (
+            <p className="mb-6 text-xs text-red-500 bg-red-50 border border-red-100 rounded-md px-3 py-2">
+              {error}
+            </p>
+          )}
 
           {/* Quick actions */}
           <div className="grid grid-cols-2 gap-4 mb-10">
@@ -154,7 +187,7 @@ export default function DashboardPage() {
             </Link>
 
             <button
-              onClick={() => router.push("/dashboard")}
+              onClick={openNewProject}
               className="group bg-white border border-stone-200 rounded-xl p-5 text-left cursor-pointer hover:border-stone-300 hover:shadow-md transition-all animate-slide-up opacity-0 animation-delay-200"
               style={{ animationFillMode: "forwards" }}
             >
@@ -169,7 +202,7 @@ export default function DashboardPage() {
             </button>
           </div>
 
-          {/* Stats row */}
+          {/* Detailed stats */}
           <div className="grid grid-cols-3 gap-4 mb-10">
             {[
               { label: "Total projects", value: projects.length, icon: "📁" },
@@ -187,12 +220,45 @@ export default function DashboardPage() {
             ))}
           </div>
 
+          <div className="grid grid-cols-2 gap-4 mb-10">
+            <div className="bg-white border border-stone-200 rounded-xl px-4 py-4">
+              <div className="flex items-center gap-2 text-stone-500 text-xs mb-2">
+                <BarChart3 className="w-3.5 h-3.5" />
+                Writing volume
+              </div>
+              <p className="font-display text-2xl text-ink">{totalWords.toLocaleString()} words</p>
+              <p className="text-xs text-stone-400 mt-1">Across all your projects</p>
+            </div>
+            <div className="bg-white border border-stone-200 rounded-xl px-4 py-4">
+              <div className="flex items-center gap-2 text-stone-500 text-xs mb-2">
+                <Activity className="w-3.5 h-3.5" />
+                Average size
+              </div>
+              <p className="font-display text-2xl text-ink">{averageWords} words</p>
+              <p className="text-xs text-stone-400 mt-1">Per project</p>
+            </div>
+          </div>
+
           {/* Recent projects */}
           <div>
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-display text-xl text-ink">Recent projects</h2>
               <span className="text-xs text-stone-400 font-mono">{projects.length} projects</span>
             </div>
+
+            <div className="relative mb-4">
+              <Search className="w-4 h-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search your work by title, content, or format..."
+                className="w-full bg-white border border-stone-200 rounded-lg pl-9 pr-3.5 py-2.5 text-sm text-ink placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-400/40 focus:border-amber-400 transition-all"
+              />
+            </div>
+
+            {isLoadingProjects && (
+              <p className="text-xs text-stone-400 mb-4">Searching...</p>
+            )}
 
             <div className="grid grid-cols-2 gap-4">
               {projects.map((project, i) => (
@@ -204,9 +270,22 @@ export default function DashboardPage() {
                 </div>
               ))}
             </div>
+
+            {!isLoadingProjects && projects.length === 0 && (
+              <div className="text-center text-sm text-stone-400 py-10">
+                No projects found for this search.
+              </div>
+            )}
           </div>
-        </div>
       </div>
+    </div>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <AppShell>
+      <DashboardContent />
     </AppShell>
   );
 }

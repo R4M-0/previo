@@ -4,7 +4,11 @@ import type { NextRequest } from "next/server";
 const AUTH_COOKIE = "previo_session";
 
 function isProtectedPath(pathname: string): boolean {
-  return pathname.startsWith("/dashboard") || pathname.startsWith("/project");
+  return (
+    pathname.startsWith("/dashboard") ||
+    pathname.startsWith("/project") ||
+    pathname.startsWith("/profile")
+  );
 }
 
 function isAuthPath(pathname: string): boolean {
@@ -32,6 +36,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/project/:path*", "/login", "/signup"],
+  matcher: ["/dashboard/:path*", "/project/:path*", "/profile/:path*", "/login", "/signup"],
 };
-

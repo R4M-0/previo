@@ -262,6 +262,60 @@ def session_user(conn: sqlite3.Connection, token: str) -> dict[str, Any] | None:
     return {"id": row["id"], "name": row["name"], "email": row["email"]}
 
 
+def update_me(conn: sqlite3.Connection, payload: dict[str, Any]) -> dict[str, Any]:
+    user_id = str(payload.get("userId", "")).strip()
+    if not user_id:
+        raise ValueError("Missing required field: userId")
+
+    row = conn.execute(
+        "SELECT id, name, email, password_hash FROM users WHERE id = ?",
+        (user_id,),
+    ).fetchone()
+    if row is None:
+        raise ValueError("User not found")
+
+    name = str(payload.get("name", row["name"])).strip()
+    email = str(payload.get("email", row["email"])).strip().lower()
+    current_password = str(payload.get("currentPassword", ""))
+    new_password = str(payload.get("newPassword", ""))
+
+    if not name:
+        raise ValueError("Name cannot be empty.")
+    if not email:
+        raise ValueError("Email cannot be empty.")
+
+    if email != row["email"]:
+        exists = conn.execute("SELECT id FROM users WHERE email = ?", (email,)).fetchone()
+        if exists and exists["id"] != user_id:
+            raise ValueError("An account with this email already exists.")
+
+    password_hash = row["password_hash"]
+    if new_password:
+        if len(new_password) < 8:
+            raise ValueError("New password must be at least 8 characters.")
+        if not current_password:
+            raise ValueError("Current password is required to set a new password.")
+        if not verify_password(current_password, password_hash or ""):
+            raise ValueError("Current password is incorrect.")
+        password_hash = hash_password(new_password)
+
+    conn.execute(
+        """
+        UPDATE users
+        SET name = ?, email = ?, password_hash = ?
+        WHERE id = ?
+        """,
+        (name, email, password_hash, user_id),
+    )
+    conn.commit()
+
+    updated = conn.execute(
+        "SELECT id, name, email FROM users WHERE id = ?",
+        (user_id,),
+    ).fetchone()
+    return public_user(updated) or {}
+
+
 def signup(conn: sqlite3.Connection, payload: dict[str, Any]) -> dict[str, Any]:
     name = str(payload.get("name", "")).strip()
     email = str(payload.get("email", "")).strip().lower()
@@ -346,15 +400,26 @@ def project_row_to_dict(conn: sqlite3.Connection, row: sqlite3.Row) -> dict[str,
     return project
 
 
-def list_projects(conn: sqlite3.Connection, user_id: str) -> list[dict[str, Any]]:
+def list_projects(conn: sqlite3.Connection, user_id: str, query: str = "") -> list[dict[str, Any]]:
+    if not user_id:
+        raise ValueError("Missing required field: userId")
+
+    query = query.strip()
+    query_sql = f"%{query}%"
     rows = conn.execute(
         """
         SELECT id, title, format, content, updated_at
         FROM projects
         WHERE owner_id = ?
+          AND (
+            ? = ''
+            OR title LIKE ?
+            OR content LIKE ?
+            OR format LIKE ?
+          )
         ORDER BY datetime(updated_at) DESC
         """,
-        (user_id,),
+        (user_id, query, query_sql, query_sql, query_sql),
     ).fetchall()
     return [project_row_to_dict(conn, row) for row in rows]
 
@@ -531,7 +596,11 @@ def main() -> int:
             if data is None:
                 raise ValueError("Invalid or expired session.")
         elif action == "list_projects":
-            data = list_projects(conn, str(payload.get("userId", "")).strip())
+            data = list_projects(
+                conn,
+                str(payload.get("userId", "")).strip(),
+                str(payload.get("query", "")).strip(),
+            )
         elif action == "get_project":
             data = get_project(
                 conn, str(payload.get("userId", "")).strip(), str(payload.get("id", "")).strip()
@@ -544,6 +613,8 @@ def main() -> int:
             data = update_project(conn, payload)
         elif action == "add_collaborator":
             data = add_collaborator(conn, payload)
+        elif action == "update_me":
+            data = update_me(conn, payload)
         else:
             raise ValueError(f"Unknown action: {action}")
 

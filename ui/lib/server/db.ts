@@ -66,8 +66,8 @@ function runDbAction<T>(action: string, payload?: object): Promise<T> {
   });
 }
 
-export async function listProjects(userId: string): Promise<Project[]> {
-  return runDbAction<Project[]>("list_projects", { userId });
+export async function listProjects(userId: string, query = ""): Promise<Project[]> {
+  return runDbAction<Project[]>("list_projects", { userId, query });
 }
 
 export async function getProject(userId: string, projectId: string): Promise<Project> {
@@ -121,4 +121,14 @@ export async function logout(sessionToken: string): Promise<{ success: boolean }
 
 export async function getUserBySession(sessionToken: string): Promise<User> {
   return runDbAction<User>("get_user_by_session", { sessionToken });
+}
+
+export async function updateMe(input: {
+  userId: string;
+  name?: string;
+  email?: string;
+  currentPassword?: string;
+  newPassword?: string;
+}): Promise<User> {
+  return runDbAction<User>("update_me", input);
 }

@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import { generateLatexPreview } from "@/lib/server/latex";
+import { requireAuthUser } from "@/lib/server/auth";
 
 export async function POST(request: Request) {
   try {
+    await requireAuthUser();
     const body = (await request.json()) as { latex?: string };
     const latex = typeof body.latex === "string" ? body.latex : "";
 
@@ -22,7 +24,7 @@ export async function POST(request: Request) {
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Failed to generate LaTeX preview.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    const status = message.toLowerCase().includes("unauthorized") ? 401 : 500;
+    return NextResponse.json({ error: message }, { status });
   }
 }
-
