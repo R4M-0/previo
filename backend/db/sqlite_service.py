@@ -76,6 +76,11 @@ def default_latex_content() -> str:
     )
 
 
+def color_for_seed(seed: str) -> str:
+    palette = ["#E07B54", "#5B8DD9", "#56B870", "#9B6DD4", "#E0A854"]
+    return palette[abs(hash(seed)) % len(palette)]
+
+
 def get_conn() -> sqlite3.Connection:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
@@ -146,6 +151,29 @@ def migrate(conn: sqlite3.Connection) -> None:
           FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
           FOREIGN KEY (actor_user_id) REFERENCES users(id) ON DELETE CASCADE
         );
+
+        CREATE TABLE IF NOT EXISTS project_members (
+          project_id TEXT NOT NULL,
+          user_id TEXT NOT NULL,
+          added_by_user_id TEXT NOT NULL,
+          added_at TEXT NOT NULL,
+          PRIMARY KEY (project_id, user_id),
+          FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+          FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+          FOREIGN KEY (added_by_user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS project_invitations (
+          id TEXT PRIMARY KEY,
+          project_id TEXT NOT NULL,
+          inviter_user_id TEXT NOT NULL,
+          invite_email TEXT NOT NULL,
+          status TEXT NOT NULL CHECK (status IN ('pending', 'accepted')),
+          created_at TEXT NOT NULL,
+          accepted_at TEXT,
+          FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+          FOREIGN KEY (inviter_user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
         """
     )
 
@@ -191,6 +219,31 @@ def migrate(conn: sqlite3.Connection) -> None:
 
     conn.commit()
     seed_initial_versions(conn)
+
+    # One-time migration: map legacy project_collaborators rows to real users by email.
+    if has_column(conn, "collaborators", "email"):
+        rows = conn.execute(
+            """
+            SELECT pc.project_id, c.email, p.owner_id
+            FROM project_collaborators pc
+            INNER JOIN collaborators c ON c.id = pc.collaborator_id
+            INNER JOIN projects p ON p.id = pc.project_id
+            """
+        ).fetchall()
+        for row in rows:
+            user = conn.execute(
+                "SELECT id FROM users WHERE lower(email) = lower(?)",
+                (row["email"],),
+            ).fetchone()
+            if user and user["id"] != row["owner_id"]:
+                conn.execute(
+                    """
+                    INSERT OR IGNORE INTO project_members (project_id, user_id, added_by_user_id, added_at)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (row["project_id"], user["id"], row["owner_id"], now_iso()),
+                )
+        conn.commit()
 
 
 def seed_initial_versions(conn: sqlite3.Connection) -> None:
@@ -297,6 +350,26 @@ def public_user(row: sqlite3.Row | None) -> dict[str, Any] | None:
     if row is None:
         return None
     return {"id": row["id"], "name": row["name"], "email": row["email"]}
+
+
+def get_accessible_project(
+    conn: sqlite3.Connection, user_id: str, project_id: str
+) -> sqlite3.Row | None:
+    return conn.execute(
+        """
+        SELECT p.id, p.owner_id, p.title, p.format, p.content, p.updated_at
+        FROM projects p
+        WHERE p.id = ?
+          AND (
+            p.owner_id = ?
+            OR EXISTS (
+              SELECT 1 FROM project_members pm
+              WHERE pm.project_id = p.id AND pm.user_id = ?
+            )
+          )
+        """,
+        (project_id, user_id, user_id),
+    ).fetchone()
 
 
 def session_user(conn: sqlite3.Connection, token: str) -> dict[str, Any] | None:
@@ -438,15 +511,23 @@ def logout(conn: sqlite3.Connection, payload: dict[str, Any]) -> dict[str, Any]:
 def collaborator_rows(conn: sqlite3.Connection, project_id: str) -> list[dict[str, Any]]:
     rows = conn.execute(
         """
-        SELECT c.id, c.name, c.email, c.color
-        FROM collaborators c
-        INNER JOIN project_collaborators pc ON pc.collaborator_id = c.id
-        WHERE pc.project_id = ?
-        ORDER BY c.name
+        SELECT u.id, u.name, u.email
+        FROM project_members pm
+        INNER JOIN users u ON u.id = pm.user_id
+        WHERE pm.project_id = ?
+        ORDER BY u.name
         """,
         (project_id,),
     ).fetchall()
-    return [dict(r) for r in rows]
+    return [
+        {
+            "id": row["id"],
+            "name": row["name"],
+            "email": row["email"],
+            "color": color_for_seed(row["email"]),
+        }
+        for row in rows
+    ]
 
 
 def project_row_to_dict(conn: sqlite3.Connection, row: sqlite3.Row) -> dict[str, Any]:
@@ -541,31 +622,30 @@ def list_projects(conn: sqlite3.Connection, user_id: str, query: str = "") -> li
     query_sql = f"%{query}%"
     rows = conn.execute(
         """
-        SELECT id, title, format, content, updated_at
-        FROM projects
-        WHERE owner_id = ?
+        SELECT p.id, p.title, p.format, p.content, p.updated_at
+        FROM projects p
+        WHERE (
+            p.owner_id = ?
+            OR EXISTS (
+              SELECT 1 FROM project_members pm
+              WHERE pm.project_id = p.id AND pm.user_id = ?
+            )
+          )
           AND (
             ? = ''
-            OR title LIKE ?
-            OR content LIKE ?
-            OR format LIKE ?
+            OR p.title LIKE ?
+            OR p.content LIKE ?
+            OR p.format LIKE ?
           )
-        ORDER BY datetime(updated_at) DESC
+        ORDER BY datetime(p.updated_at) DESC
         """,
-        (user_id, query, query_sql, query_sql, query_sql),
+        (user_id, user_id, query, query_sql, query_sql, query_sql),
     ).fetchall()
     return [project_row_to_dict(conn, row) for row in rows]
 
 
 def get_project(conn: sqlite3.Connection, user_id: str, project_id: str) -> dict[str, Any] | None:
-    row = conn.execute(
-        """
-        SELECT id, title, format, content, updated_at
-        FROM projects
-        WHERE id = ? AND owner_id = ?
-        """,
-        (project_id, user_id),
-    ).fetchone()
+    row = get_accessible_project(conn, user_id, project_id)
     if row is None:
         return None
     return project_row_to_dict(conn, row)
@@ -637,13 +717,17 @@ def update_project(conn: sqlite3.Connection, payload: dict[str, Any]) -> dict[st
     ):
         return project
 
+    project_row = get_accessible_project(conn, user_id, project_id)
+    if project_row is None:
+        raise ValueError("Project not found")
+
     conn.execute(
         """
         UPDATE projects
         SET title = ?, format = ?, content = ?, updated_at = ?
-        WHERE id = ? AND owner_id = ?
+        WHERE id = ?
         """,
-        (title, fmt, content, now_iso(), project_id, user_id),
+        (title, fmt, content, now_iso(), project_id),
     )
     create_version_entry(
         conn,
@@ -672,55 +756,188 @@ def add_collaborator(conn: sqlite3.Connection, payload: dict[str, Any]) -> dict[
     if not project_id or not email:
         raise ValueError("Missing required fields: projectId, email")
 
-    if get_project(conn, user_id, project_id) is None:
+    project = get_accessible_project(conn, user_id, project_id)
+    if project is None:
         raise ValueError("Project not found")
 
-    existing = conn.execute(
-        "SELECT id, name, email, color FROM collaborators WHERE email = ?",
+    invitee_user = conn.execute(
+        "SELECT id, name, email FROM users WHERE lower(email) = lower(?)",
         (email,),
     ).fetchone()
+    if invitee_user and invitee_user["id"] == project["owner_id"]:
+        raise ValueError("Project owner is already part of the project.")
 
-    if existing is None:
-        collaborator_id = f"c_{uuid.uuid4().hex[:8]}"
-        name = email.split("@")[0]
-        palette = ["#E07B54", "#5B8DD9", "#56B870", "#9B6DD4", "#E0A854"]
-        color = palette[abs(hash(email)) % len(palette)]
-        conn.execute(
+    if invitee_user:
+        membership = conn.execute(
             """
-            INSERT INTO collaborators (id, name, email, color)
-            VALUES (?, ?, ?, ?)
+            SELECT 1 FROM project_members
+            WHERE project_id = ? AND user_id = ?
             """,
-            (collaborator_id, name, email, color),
-        )
-        collaborator = {
-            "id": collaborator_id,
-            "name": name,
-            "email": email,
-            "color": color,
-        }
-    else:
-        collaborator = dict(existing)
-        collaborator_id = collaborator["id"]
+            (project_id, invitee_user["id"]),
+        ).fetchone()
+        if membership:
+            raise ValueError("User is already a collaborator on this project.")
 
+    existing_pending = conn.execute(
+        """
+        SELECT id FROM project_invitations
+        WHERE project_id = ? AND lower(invite_email) = lower(?) AND status = 'pending'
+        """,
+        (project_id, email),
+    ).fetchone()
+    if existing_pending:
+        raise ValueError("An invitation is already pending for this email.")
+
+    invitation_id = f"inv_{uuid.uuid4().hex[:10]}"
     conn.execute(
         """
-        INSERT OR IGNORE INTO project_collaborators (project_id, collaborator_id)
-        VALUES (?, ?)
+        INSERT INTO project_invitations (
+          id, project_id, inviter_user_id, invite_email, status, created_at
+        )
+        VALUES (?, ?, ?, ?, 'pending', ?)
         """,
-        (project_id, collaborator_id),
+        (invitation_id, project_id, user_id, email, now_iso()),
     )
+    collaborator = {
+        "id": invitation_id,
+        "name": (invitee_user["name"] if invitee_user else email.split("@")[0]),
+        "email": email,
+        "color": color_for_seed(email),
+        "status": "pending",
+    }
     conn.execute(
-        "UPDATE projects SET updated_at = ? WHERE id = ? AND owner_id = ?",
-        (now_iso(), project_id, user_id),
+        "UPDATE projects SET updated_at = ? WHERE id = ?",
+        (now_iso(), project_id),
     )
     conn.commit()
     return collaborator
 
 
+def list_invitations(conn: sqlite3.Connection, user_id: str) -> list[dict[str, Any]]:
+    user = conn.execute(
+        "SELECT id, email FROM users WHERE id = ?",
+        (user_id,),
+    ).fetchone()
+    if user is None:
+        raise ValueError("User not found")
+
+    rows = conn.execute(
+        """
+        SELECT
+          i.id,
+          i.project_id,
+          i.invite_email,
+          i.status,
+          i.created_at,
+          p.title AS project_title,
+          p.format AS project_format,
+          u.id AS inviter_id,
+          u.name AS inviter_name,
+          u.email AS inviter_email
+        FROM project_invitations i
+        INNER JOIN projects p ON p.id = i.project_id
+        INNER JOIN users u ON u.id = i.inviter_user_id
+        WHERE lower(i.invite_email) = lower(?)
+          AND i.status = 'pending'
+        ORDER BY datetime(i.created_at) DESC
+        """,
+        (user["email"],),
+    ).fetchall()
+
+    return [
+        {
+            "id": row["id"],
+            "projectId": row["project_id"],
+            "projectTitle": row["project_title"],
+            "projectFormat": row["project_format"],
+            "inviteEmail": row["invite_email"],
+            "status": row["status"],
+            "createdAt": row["created_at"],
+            "inviter": {
+                "id": row["inviter_id"],
+                "name": row["inviter_name"],
+                "email": row["inviter_email"],
+            },
+        }
+        for row in rows
+    ]
+
+
+def respond_invitation(conn: sqlite3.Connection, payload: dict[str, Any]) -> dict[str, Any]:
+    user_id = str(payload.get("userId", "")).strip()
+    invitation_id = str(payload.get("invitationId", "")).strip()
+    decision = str(payload.get("decision", "")).strip().lower()
+
+    if not user_id:
+        raise ValueError("Missing required field: userId")
+    if not invitation_id:
+        raise ValueError("Missing required field: invitationId")
+    if decision not in ("accept", "deny"):
+        raise ValueError("Invalid decision. Expected 'accept' or 'deny'.")
+
+    user = conn.execute(
+        "SELECT id, email FROM users WHERE id = ?",
+        (user_id,),
+    ).fetchone()
+    if user is None:
+        raise ValueError("User not found")
+
+    invitation = conn.execute(
+        """
+        SELECT id, project_id, inviter_user_id, invite_email, status
+        FROM project_invitations
+        WHERE id = ?
+        """,
+        (invitation_id,),
+    ).fetchone()
+    if invitation is None or invitation["status"] != "pending":
+        raise ValueError("Invitation not found or no longer pending.")
+
+    if invitation["invite_email"].lower() != user["email"].lower():
+        raise ValueError("You are not allowed to respond to this invitation.")
+
+    if decision == "accept":
+        owner_row = conn.execute(
+            "SELECT owner_id FROM projects WHERE id = ?",
+            (invitation["project_id"],),
+        ).fetchone()
+        if owner_row and owner_row["owner_id"] != user_id:
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO project_members (project_id, user_id, added_by_user_id, added_at)
+                VALUES (?, ?, ?, ?)
+                """,
+                (
+                    invitation["project_id"],
+                    user_id,
+                    invitation["inviter_user_id"],
+                    now_iso(),
+                ),
+            )
+        conn.execute(
+            """
+            UPDATE project_invitations
+            SET status = 'accepted', accepted_at = ?
+            WHERE id = ?
+            """,
+            (now_iso(), invitation_id),
+        )
+        conn.commit()
+        return {"status": "accepted"}
+
+    # Deny: remove pending invitation.
+    conn.execute(
+        "DELETE FROM project_invitations WHERE id = ?",
+        (invitation_id,),
+    )
+    conn.commit()
+    return {"status": "denied"}
+
+
 def list_project_versions(
     conn: sqlite3.Connection, user_id: str, project_id: str
 ) -> list[dict[str, Any]]:
-    if get_project(conn, user_id, project_id) is None:
+    if get_accessible_project(conn, user_id, project_id) is None:
         raise ValueError("Project not found")
 
     rows = conn.execute(
@@ -776,7 +993,7 @@ def revert_project_version(conn: sqlite3.Connection, payload: dict[str, Any]) ->
     if not project_id or not version_id:
         raise ValueError("Missing required fields: projectId, versionId")
 
-    current = get_project(conn, user_id, project_id)
+    current = get_accessible_project(conn, user_id, project_id)
     if current is None:
         raise ValueError("Project not found")
 
@@ -795,7 +1012,7 @@ def revert_project_version(conn: sqlite3.Connection, payload: dict[str, Any]) ->
         """
         UPDATE projects
         SET title = ?, format = ?, content = ?, updated_at = ?
-        WHERE id = ? AND owner_id = ?
+        WHERE id = ?
         """,
         (
             version["snapshot_title"],
@@ -803,8 +1020,7 @@ def revert_project_version(conn: sqlite3.Connection, payload: dict[str, Any]) ->
             version["snapshot_content"],
             now_iso(),
             project_id,
-            user_id,
-        ),
+        )
     )
     create_version_entry(
         conn,
@@ -886,6 +1102,10 @@ def main() -> int:
             data = add_collaborator(conn, payload)
         elif action == "update_me":
             data = update_me(conn, payload)
+        elif action == "list_invitations":
+            data = list_invitations(conn, str(payload.get("userId", "")).strip())
+        elif action == "respond_invitation":
+            data = respond_invitation(conn, payload)
         elif action == "list_project_versions":
             data = list_project_versions(
                 conn,

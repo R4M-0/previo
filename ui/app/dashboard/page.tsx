@@ -15,10 +15,13 @@ import {
   Search,
   BarChart3,
   Activity,
+  Bell,
+  Check,
+  X,
 } from "lucide-react";
 import { AppShell, useAppShellActions } from "@/components/layout/AppShell";
 import { formatRelativeDate } from "@/lib/date";
-import { Project, User } from "@/types";
+import { Project, ProjectInvitation, User } from "@/types";
 
 function ProjectCard({ project }: { project: Project }) {
   const router = useRouter();
@@ -91,6 +94,8 @@ function DashboardContent() {
   const [user, setUser] = useState<User | null>(null);
   const [search, setSearch] = useState("");
   const [isLoadingProjects, setIsLoadingProjects] = useState(false);
+  const [invitations, setInvitations] = useState<ProjectInvitation[]>([]);
+  const [isLoadingInvitations, setIsLoadingInvitations] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -127,6 +132,53 @@ function DashboardContent() {
     }, 250);
     return () => clearTimeout(timeout);
   }, [search]);
+
+  useEffect(() => {
+    async function loadInvitations() {
+      setIsLoadingInvitations(true);
+      try {
+        const response = await fetch("/api/invitations");
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error || "Failed to load invitations.");
+        }
+        setInvitations(data.invitations || []);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed to load invitations.");
+      } finally {
+        setIsLoadingInvitations(false);
+      }
+    }
+    void loadInvitations();
+  }, []);
+
+  async function handleInvitationDecision(
+    invitationId: string,
+    decision: "accept" | "deny"
+  ) {
+    try {
+      const response = await fetch("/api/invitations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ invitationId, decision }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to respond to invitation.");
+      }
+
+      setInvitations((prev) => prev.filter((invite) => invite.id !== invitationId));
+      if (decision === "accept") {
+        const projectsRes = await fetch(`/api/projects?q=${encodeURIComponent(search)}`);
+        const projectsData = await projectsRes.json();
+        if (projectsRes.ok) {
+          setProjects(projectsData.projects || []);
+        }
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to respond invitation.");
+    }
+  }
 
   const firstName = user?.name?.split(" ")[0] || "Writer";
   const latestProject = projects[0];
@@ -168,6 +220,58 @@ function DashboardContent() {
               {error}
             </p>
           )}
+
+          <div className="mb-8">
+            <div className="flex items-center gap-2 mb-3">
+              <Bell className="w-4 h-4 text-stone-500" />
+              <h2 className="text-sm font-semibold text-ink">Invitations</h2>
+              <span className="text-xs text-stone-400 font-mono">
+                {isLoadingInvitations ? "..." : invitations.length}
+              </span>
+            </div>
+            {isLoadingInvitations ? (
+              <p className="text-xs text-stone-400">Loading invitations...</p>
+            ) : invitations.length === 0 ? (
+              <div className="bg-white border border-stone-200 rounded-xl px-4 py-3 text-sm text-stone-400">
+                No pending invitations.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {invitations.map((invite) => (
+                  <div
+                    key={invite.id}
+                    className="bg-white border border-stone-200 rounded-xl px-4 py-3 flex items-center justify-between gap-3"
+                  >
+                    <div>
+                      <p className="text-sm text-ink">
+                        <span className="font-semibold">{invite.inviter.name}</span> invited you to{" "}
+                        <span className="font-semibold">{invite.projectTitle}</span>
+                      </p>
+                      <p className="text-xs text-stone-400">
+                        {invite.projectFormat.toUpperCase()} • {formatRelativeDate(invite.createdAt)}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleInvitationDecision(invite.id, "deny")}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border border-stone-200 text-stone-600 hover:bg-stone-50 transition-all"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                        Deny
+                      </button>
+                      <button
+                        onClick={() => handleInvitationDecision(invite.id, "accept")}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-ink text-white hover:bg-stone-800 transition-all"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        Accept
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
 
           {/* Quick actions */}
           <div className="grid grid-cols-2 gap-4 mb-10">

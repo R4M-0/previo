@@ -1,7 +1,13 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import path from "node:path";
-import { Collaborator, Project, ProjectVersion, User } from "@/types";
+import {
+  Collaborator,
+  Project,
+  ProjectInvitation,
+  ProjectVersion,
+  User,
+} from "@/types";
 
 type DbResponse<T> = { ok: true; data: T } | { ok: false; error: string };
 
@@ -149,5 +155,21 @@ export async function revertProjectVersion(
     userId,
     projectId,
     versionId,
+  });
+}
+
+export async function listInvitations(userId: string): Promise<ProjectInvitation[]> {
+  return runDbAction<ProjectInvitation[]>("list_invitations", { userId });
+}
+
+export async function respondInvitation(
+  userId: string,
+  invitationId: string,
+  decision: "accept" | "deny"
+): Promise<{ status: "accepted" | "denied" }> {
+  return runDbAction<{ status: "accepted" | "denied" }>("respond_invitation", {
+    userId,
+    invitationId,
+    decision,
   });
 }

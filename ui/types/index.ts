@@ -38,3 +38,18 @@ export interface ProjectVersion {
     email: string;
   };
 }
+
+export interface ProjectInvitation {
+  id: string;
+  projectId: string;
+  projectTitle: string;
+  projectFormat: "markdown" | "latex";
+  inviteEmail: string;
+  status: "pending";
+  createdAt: string;
+  inviter: {
+    id: string;
+    name: string;
+    email: string;
+  };
+}

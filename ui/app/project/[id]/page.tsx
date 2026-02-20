@@ -308,7 +308,7 @@ export default function ProjectEditorPage() {
     setEditorWidthPct((prev) => Math.max(20, Math.min(80, prev + deltaPct)));
   }
 
-  async function handleAddCollaborator(email: string) {
+  async function handleAddCollaborator(email: string): Promise<void> {
     if (!project) return;
     try {
       const response = await fetch(`/api/projects/${project.id}/collaborators`, {
@@ -321,15 +321,19 @@ export default function ProjectEditorPage() {
         throw new Error(data.error || "Failed to add collaborator.");
       }
 
-      const collaborator = data.collaborator as Collaborator;
-      setCollaborators((prev) => {
-        if (prev.some((c) => c.id === collaborator.id)) return prev;
-        return [...prev, collaborator];
-      });
+      // Invitations are pending until invitee accepts; keep live collaborator list unchanged.
+      // Reload collaborators from the project endpoint to stay consistent for accepted members.
+      const projectRes = await fetch(`/api/projects/${project.id}`);
+      const projectData = await projectRes.json();
+      if (projectRes.ok) {
+        const updatedProject = projectData.project as Project;
+        setCollaborators(updatedProject.collaborators || []);
+      }
     } catch (error) {
-      setPreviewError(
-        error instanceof Error ? error.message : "Failed to add collaborator."
-      );
+      const message =
+        error instanceof Error ? error.message : "Failed to add collaborator.";
+      setPreviewError(message);
+      throw new Error(message);
     }
   }
 
