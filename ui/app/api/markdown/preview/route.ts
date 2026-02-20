@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import { generateMarkdownPreview } from "@/lib/server/markdown";
+import { requireAuthUser } from "@/lib/server/auth";
 
 export async function POST(request: Request) {
   try {
+    await requireAuthUser();
     const body = (await request.json()) as { markdown?: string };
     const markdown = typeof body.markdown === "string" ? body.markdown : "";
 
@@ -22,7 +24,7 @@ export async function POST(request: Request) {
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Failed to generate Markdown preview.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    const status = message.toLowerCase().includes("unauthorized") ? 401 : 500;
+    return NextResponse.json({ error: message }, { status });
   }
 }
-

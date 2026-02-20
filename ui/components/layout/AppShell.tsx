@@ -2,14 +2,34 @@
 
 "use client";
 
-import { useState } from "react";
+import { createContext, useContext, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Sidebar } from "./Sidebar";
 import { NewProjectModal } from "@/components/ui/NewProjectModal";
 
+type AppShellActions = {
+  openNewProject: () => void;
+};
+
+const AppShellActionsContext = createContext<AppShellActions | null>(null);
+
+export function useAppShellActions(): AppShellActions {
+  const value = useContext(AppShellActionsContext);
+  if (!value) {
+    throw new Error("useAppShellActions must be used inside AppShell.");
+  }
+  return value;
+}
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [showNewProject, setShowNewProject] = useState(false);
+  const actions = useMemo<AppShellActions>(
+    () => ({
+      openNewProject: () => setShowNewProject(true),
+    }),
+    []
+  );
 
   async function handleCreateProject(title: string, format: "markdown" | "latex") {
     try {
@@ -35,18 +55,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="h-screen flex overflow-hidden bg-canvas">
-      <Sidebar onNewProject={() => setShowNewProject(true)} />
-      <main className="flex-1 overflow-hidden">
-        {children}
-      </main>
+    <AppShellActionsContext.Provider value={actions}>
+      <div className="h-screen flex overflow-hidden bg-canvas">
+        <Sidebar onNewProject={actions.openNewProject} />
+        <main className="flex-1 overflow-hidden">
+          {children}
+        </main>
 
-      {showNewProject && (
-        <NewProjectModal
-          onClose={() => setShowNewProject(false)}
-          onCreate={handleCreateProject}
-        />
-      )}
-    </div>
+        {showNewProject && (
+          <NewProjectModal
+            onClose={() => setShowNewProject(false)}
+            onCreate={handleCreateProject}
+          />
+        )}
+      </div>
+    </AppShellActionsContext.Provider>
   );
 }

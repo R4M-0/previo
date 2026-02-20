@@ -217,7 +217,10 @@ export function Sidebar({ onNewProject }: SidebarProps) {
             >
               <button
                 className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-stone-600 hover:bg-stone-50 hover:text-ink transition-colors"
-                onClick={() => setProfileOpen(false)}
+                onClick={() => {
+                  setProfileOpen(false);
+                  router.push("/profile");
+                }}
               >
                 <UserIcon className="w-3.5 h-3.5" />
                 Profile
