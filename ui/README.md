@@ -1,69 +1,80 @@
-# Previo — Frontend
+# Previo UI
 
-Collaborative Markdown & LaTeX editor built with **Next.js 14**, **TypeScript**, and **Tailwind CSS**.
+Next.js frontend for Previo (collaborative Markdown + LaTeX editor).
 
-## Quick Start
+## Stack
+
+- Next.js (App Router)
+- React + TypeScript
+- Tailwind CSS
+
+## Setup
 
 ```bash
+cd ui
 npm install
+```
+
+Create `ui/.env.local`:
+
+```env
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+GITHUB_CLIENT_ID=...
+GITHUB_CLIENT_SECRET=...
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+APP_URL=http://localhost:3000
+```
+
+Run:
+
+```bash
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) — you'll be redirected to `/login`.
+Open `http://localhost:3000`.
 
-## Demo credentials
+## Main UI Features
 
-Any email + any password with 6+ characters will work (mock auth).
+- Auth:
+  - Email/password login and signup
+  - Google and GitHub OAuth
+- Dashboard:
+  - Project list + search
+  - Invitation notifications with Accept/Deny
+  - Detailed writing stats
+- Editor:
+  - Markdown/LaTeX source + preview
+  - Download render (HTML/PDF)
+  - Version history + diff + revert
+- Collaboration:
+  - Invite collaborators by email
+  - Shared project access after invite acceptance
+- Theme:
+  - System-based default theme
+  - User override in profile (System/Light/Dark)
 
-## Project Structure
+## Important Routes
 
-```
-previo/
-├── app/
-│   ├── globals.css               # Global styles + font imports
-│   ├── layout.tsx                # Root layout
-│   ├── page.tsx                  # Redirects to /login
-│   ├── login/
-│   │   └── page.tsx              # Login page
-│   ├── signup/
-│   │   └── page.tsx              # Signup page with password rules
-│   ├── dashboard/
-│   │   └── page.tsx              # Dashboard with project grid
-│   └── project/[id]/
-│       └── page.tsx              # Split-panel editor
-│
-├── components/
-│   ├── layout/
-│   │   ├── Sidebar.tsx           # Retractable sidebar with user menu
-│   │   └── AppShell.tsx          # App shell wrapping sidebar + content
-│   └── ui/
-│       ├── NewProjectModal.tsx   # Create project modal
-│       └── CollaboratorModal.tsx # Invite collaborators modal
-│
-├── lib/
-│   ├── mock.ts                   # Mock data + formatRelativeDate util
-│   └── renderer.ts               # Markdown + LaTeX → HTML renderers
-│
-├── types/
-│   └── index.ts                  # TypeScript types (User, Project, Collaborator)
-│
-├── tailwind.config.ts
-├── tsconfig.json
-└── package.json
-```
+- Pages:
+  - `/login`
+  - `/signup`
+  - `/dashboard`
+  - `/project/[id]`
+  - `/profile`
+- API:
+  - `/api/auth/*`
+  - `/api/projects/*`
+  - `/api/invitations`
+  - `/api/markdown/*`
+  - `/api/latex/*`
 
-## Key Features
+## Auth Protection
 
-- **Auth pages** — Login & Signup with validation, show/hide password, animated panels
-- **Retractable sidebar** — Collapses to icon-only mode, shows recent projects, user menu
-- **Dashboard** — Welcome header, quick actions, stats, project grid with format badges
-- **Split-panel editor** — Draggable divider to resize editor/preview, Ctrl+S to save
-- **Live preview** — Markdown renders ~150ms after typing; LaTeX ~800ms (simulating compile)
-- **Collaborator modal** — Shows active users, invite by email
-- **Format toggle** — Switch between Markdown and LaTeX mid-document
+`ui/middleware.ts` protects app routes and redirects unauthenticated users to `/login`.
 
-## Replacing Mock Data
+## Notes
 
-1. Replace `MOCK_USER`, `MOCK_PROJECTS` in `lib/mock.ts` with real API calls
-2. Update auth logic in `app/login/page.tsx` and `app/signup/page.tsx`
-3. For LaTeX compilation, POST source to your Python service and render the returned PDF/HTML
+- UI depends on Python backend scripts in `../backend`.
+- Restart dev server after changing `.env.local`.
+
