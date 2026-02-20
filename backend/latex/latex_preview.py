@@ -15,7 +15,7 @@ import json
 import tempfile
 from pathlib import Path
 
-from latex_renderer import LatexRenderError, render_latex_to_pdf
+from latex_renderer import LatexRenderError, read_text_with_fallback, render_latex_to_pdf
 
 
 def parse_args() -> argparse.Namespace:
@@ -52,7 +52,7 @@ def _read_source(args: argparse.Namespace) -> str:
         import sys
 
         return sys.stdin.read()
-    return Path(args.input_file).read_text(encoding="utf-8")
+    return read_text_with_fallback(Path(args.input_file))
 
 
 def build_preview_html(data_url: str) -> str:

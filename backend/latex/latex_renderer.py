@@ -20,6 +20,18 @@ class LatexRenderError(RuntimeError):
     """Raised when LaTeX compilation fails."""
 
 
+def read_text_with_fallback(path: Path) -> str:
+    raw = path.read_bytes()
+    for encoding in ("utf-8", "cp1252", "latin-1"):
+        try:
+            return raw.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    raise LatexRenderError(
+        f"Could not decode '{path}' with supported encodings (utf-8, cp1252, latin-1)."
+    )
+
+
 def render_latex_to_pdf(
     latex_source: str,
     output_file: Path,
@@ -67,6 +79,8 @@ def render_latex_to_pdf(
                 cwd=tmp_path,
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 timeout=timeout,
                 check=False,
             )
@@ -94,7 +108,7 @@ def _read_latex_input(args: argparse.Namespace) -> str:
     if args.stdin:
         return input_stream_read()
     if args.input_file:
-        return Path(args.input_file).read_text(encoding="utf-8")
+        return read_text_with_fallback(Path(args.input_file))
     raise LatexRenderError("Provide either --stdin or --input-file.")
 
 
