@@ -9,13 +9,14 @@ import { Collaborator } from "@/types";
 interface CollaboratorModalProps {
   collaborators: Collaborator[];
   onClose: () => void;
-  onAdd: (email: string) => void;
+  onAdd: (email: string) => Promise<void>;
 }
 
 export function CollaboratorModal({ collaborators, onClose, onAdd }: CollaboratorModalProps) {
   const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
@@ -28,13 +29,18 @@ export function CollaboratorModal({ collaborators, onClose, onAdd }: Collaborato
   async function handleInvite(e: React.FormEvent) {
     e.preventDefault();
     if (!email.trim()) return;
+    setError("");
     setIsLoading(true);
-    await new Promise((r) => setTimeout(r, 800));
-    onAdd(email.trim());
-    setIsLoading(false);
-    setSuccess(true);
-    setEmail("");
-    setTimeout(() => setSuccess(false), 2000);
+    try {
+      await onAdd(email.trim());
+      setSuccess(true);
+      setEmail("");
+      setTimeout(() => setSuccess(false), 2000);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to invite collaborator.");
+    } finally {
+      setIsLoading(false);
+    }
   }
 
   return (
@@ -112,6 +118,11 @@ export function CollaboratorModal({ collaborators, onClose, onAdd }: Collaborato
                 {isLoading ? "Sending" : success ? "Sent!" : "Invite"}
               </button>
             </div>
+            {error && (
+              <p className="text-xs text-red-500 bg-red-50 border border-red-100 rounded-md px-3 py-2">
+                {error}
+              </p>
+            )}
           </form>
 
           <div className="pt-1">

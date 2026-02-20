@@ -21,7 +21,13 @@ export async function POST(
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to add collaborator.";
     const lower = message.toLowerCase();
-    const status = lower.includes("unauthorized") ? 401 : lower.includes("not found") ? 404 : 500;
+    const status = lower.includes("unauthorized")
+      ? 401
+      : lower.includes("not found")
+        ? 404
+        : lower.includes("already") || lower.includes("owner")
+          ? 400
+          : 500;
     return NextResponse.json({ error: message }, { status });
   }
 }
