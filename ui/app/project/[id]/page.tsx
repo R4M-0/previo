@@ -123,6 +123,7 @@ export default function ProjectEditorPage() {
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
   const [editorWidthPct, setEditorWidthPct] = useState(50);
   const [isConnected, setIsConnected] = useState(true);
+  const [hasRemoteUpdate, setHasRemoteUpdate] = useState(false);
   const [isLoadingProject, setIsLoadingProject] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -472,6 +473,67 @@ export default function ProjectEditorPage() {
     }
   }, [showHistory, project?.id]);
 
+  useEffect(() => {
+    if (!project?.id || isLoadingProject) return;
+    const currentProjectId = project.id;
+    const currentUpdatedAt = project.updatedAt;
+
+    let isCancelled = false;
+
+    async function syncFromServer() {
+      try {
+        const response = await fetch(`/api/projects/${currentProjectId}`, {
+          cache: "no-store",
+        });
+        const data = await response.json();
+        if (!response.ok || isCancelled) return;
+
+        const remote = data.project as Project;
+        if (!remote || remote.updatedAt === currentUpdatedAt) {
+          setIsConnected(true);
+          return;
+        }
+
+        // Don't overwrite local unsaved edits; keep a reminder instead.
+        if (!isSaved || isSaving) {
+          setHasRemoteUpdate(true);
+          setIsConnected(true);
+          return;
+        }
+
+        skipNextDirtyRef.current = true;
+        setProject(remote);
+        setContent(remote.content ?? "");
+        setFormat(remote.format);
+        setCollaborators(remote.collaborators || []);
+        setHasRemoteUpdate(false);
+        setIsSaved(true);
+        setIsConnected(true);
+        await renderPreview(remote.content ?? "", remote.format);
+      } catch {
+        if (!isCancelled) {
+          setIsConnected(false);
+        }
+      }
+    }
+
+    const intervalId = setInterval(() => {
+      void syncFromServer();
+    }, 1800);
+
+    return () => {
+      isCancelled = true;
+      clearInterval(intervalId);
+    };
+  }, [
+    project?.id,
+    project?.updatedAt,
+    isLoadingProject,
+    isSaved,
+    isSaving,
+    renderPreview,
+  ]);
+
   return (
     <AppShell>
       <div className="flex flex-col h-full">
@@ -548,6 +610,11 @@ export default function ProjectEditorPage() {
                 </span>
               ) : (
                 <span className="text-xs text-stone-400 italic">Unsaved changes</span>
+              )}
+              {hasRemoteUpdate && (
+                <span className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">
+                  Remote updates available
+                </span>
               )}
             </div>
           </div>
