@@ -18,12 +18,23 @@ import {
   Bell,
   Check,
   X,
+  Trash2,
 } from "lucide-react";
 import { AppShell, useAppShellActions } from "@/components/layout/AppShell";
 import { formatRelativeDate } from "@/lib/date";
 import { Project, ProjectInvitation, User } from "@/types";
 
-function ProjectCard({ project }: { project: Project }) {
+function ProjectCard({
+  project,
+  canDelete,
+  isDeleting,
+  onDelete,
+}: {
+  project: Project;
+  canDelete: boolean;
+  isDeleting: boolean;
+  onDelete: (project: Project) => void;
+}) {
   const router = useRouter();
 
   return (
@@ -48,8 +59,23 @@ function ProjectCard({ project }: { project: Project }) {
           )}
           {project.format === "latex" ? "LaTeX" : "Markdown"}
         </span>
-
-        <ArrowUpRight className="w-4 h-4 text-stone-300 group-hover:text-amber-500 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all" />
+        <div className="flex items-center gap-1.5">
+          {canDelete && (
+            <button
+              type="button"
+              disabled={isDeleting}
+              onClick={(event) => {
+                event.stopPropagation();
+                onDelete(project);
+              }}
+              className="inline-flex items-center justify-center w-6 h-6 rounded-md text-stone-400 hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Delete project"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          )}
+          <ArrowUpRight className="w-4 h-4 text-stone-300 group-hover:text-amber-500 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all" />
+        </div>
       </div>
 
       {/* Title */}
@@ -96,6 +122,7 @@ function DashboardContent() {
   const [isLoadingProjects, setIsLoadingProjects] = useState(false);
   const [invitations, setInvitations] = useState<ProjectInvitation[]>([]);
   const [isLoadingInvitations, setIsLoadingInvitations] = useState(false);
+  const [deletingProjectId, setDeletingProjectId] = useState<string | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -177,6 +204,29 @@ function DashboardContent() {
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to respond invitation.");
+    }
+  }
+
+  async function handleDeleteProject(project: Project) {
+    const shouldDelete = window.confirm(
+      `Delete "${project.title}"? This action is permanent and cannot be undone.`
+    );
+    if (!shouldDelete) return;
+
+    setDeletingProjectId(project.id);
+    try {
+      const response = await fetch(`/api/projects/${project.id}`, {
+        method: "DELETE",
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to delete project.");
+      }
+      setProjects((prev) => prev.filter((p) => p.id !== project.id));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to delete project.");
+    } finally {
+      setDeletingProjectId(null);
     }
   }
 
@@ -370,7 +420,12 @@ function DashboardContent() {
                   key={project.id}
                   style={{ animationDelay: `${i * 80 + 400}ms` }}
                 >
-                  <ProjectCard project={project} />
+                  <ProjectCard
+                    project={project}
+                    canDelete={project.ownerId === user?.id}
+                    isDeleting={deletingProjectId === project.id}
+                    onDelete={handleDeleteProject}
+                  />
                 </div>
               ))}
             </div>
