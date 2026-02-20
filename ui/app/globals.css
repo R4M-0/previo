@@ -1,0 +1,101 @@
+/* app/globals.css */
+
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300;1,9..40,400&family=DM+Serif+Display:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --canvas: #F7F6F3;
+  --ink: #1A1917;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  background-color: var(--canvas);
+  color: var(--ink);
+  font-family: 'DM Sans', system-ui, sans-serif;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #D6D3D1;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #A8A29E;
+}
+
+/* Editor textarea */
+.editor-textarea {
+  resize: none;
+  outline: none;
+  background: transparent;
+  width: 100%;
+  height: 100%;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 13.5px;
+  line-height: 1.75;
+  color: #1A1917;
+  caret-color: #F59E0B;
+}
+
+/* Markdown preview styles */
+.preview-content h1 { font-family: 'DM Serif Display', serif; font-size: 1.875rem; font-weight: 400; margin-bottom: 0.75rem; margin-top: 1.5rem; color: #1A1917; }
+.preview-content h2 { font-family: 'DM Serif Display', serif; font-size: 1.5rem; font-weight: 400; margin-bottom: 0.5rem; margin-top: 1.25rem; color: #1A1917; }
+.preview-content h3 { font-size: 1.125rem; font-weight: 600; margin-bottom: 0.5rem; margin-top: 1rem; color: #292524; }
+.preview-content p { margin-bottom: 0.875rem; line-height: 1.75; color: #44403C; }
+.preview-content ul { list-style: disc; padding-left: 1.5rem; margin-bottom: 0.875rem; color: #44403C; }
+.preview-content ol { list-style: decimal; padding-left: 1.5rem; margin-bottom: 0.875rem; color: #44403C; }
+.preview-content li { margin-bottom: 0.25rem; line-height: 1.7; }
+.preview-content code { font-family: 'JetBrains Mono', monospace; font-size: 0.82em; background: #EEEDE9; padding: 0.15em 0.4em; border-radius: 3px; color: #E07B54; }
+.preview-content pre { background: #1C1917; border-radius: 6px; padding: 1rem 1.25rem; margin-bottom: 1rem; overflow-x: auto; }
+.preview-content pre code { background: transparent; color: #E5E7EB; font-size: 0.83em; padding: 0; }
+.preview-content blockquote { border-left: 3px solid #FBBF24; padding-left: 1rem; color: #57534E; font-style: italic; margin: 1rem 0; }
+.preview-content strong { font-weight: 600; color: #1A1917; }
+.preview-content em { font-style: italic; }
+.preview-content a { color: #E07B54; text-decoration: underline; text-underline-offset: 2px; }
+.preview-content hr { border: none; border-top: 1px solid #E7E5E4; margin: 1.5rem 0; }
+.preview-content table { width: 100%; border-collapse: collapse; margin-bottom: 1rem; font-size: 0.9em; }
+.preview-content th { background: #F5F5F4; padding: 0.5rem 0.75rem; text-align: left; font-weight: 600; border: 1px solid #E7E5E4; }
+.preview-content td { padding: 0.5rem 0.75rem; border: 1px solid #E7E5E4; color: #44403C; }
+.preview-content tr:nth-child(even) td { background: #FAFAF9; }
+.preview-content input[type="checkbox"] { margin-right: 0.4rem; accent-color: #F59E0B; }
+
+/* LaTeX preview */
+.latex-preview { font-family: 'DM Serif Display', serif; font-size: 14px; line-height: 1.8; color: #1A1917; }
+.latex-preview .latex-title { font-size: 1.5rem; font-weight: 400; text-align: center; margin-bottom: 0.25rem; }
+.latex-preview .latex-author { text-align: center; color: #57534E; margin-bottom: 0.25rem; font-family: 'DM Sans', sans-serif; }
+.latex-preview .latex-date { text-align: center; color: #78716C; font-family: 'DM Sans', sans-serif; font-size: 0.9em; margin-bottom: 1.5rem; }
+.latex-preview .latex-abstract { margin: 1.5rem 2rem; padding: 1rem; background: #F5F5F4; border-radius: 4px; }
+.latex-preview .latex-abstract-title { font-family: 'DM Sans', sans-serif; font-weight: 600; font-size: 0.85em; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; color: #57534E; }
+.latex-preview .latex-section { font-family: 'DM Sans', sans-serif; font-size: 1.1rem; font-weight: 700; margin-top: 1.5rem; margin-bottom: 0.5rem; color: #1A1917; }
+.latex-preview .latex-subsection { font-family: 'DM Sans', sans-serif; font-size: 0.95rem; font-weight: 600; margin-top: 1rem; margin-bottom: 0.35rem; color: #292524; }
+.latex-preview .latex-equation { font-family: 'JetBrains Mono', monospace; background: #F5F5F4; border: 1px solid #E7E5E4; border-radius: 4px; padding: 0.75rem 1rem; margin: 0.75rem 0; text-align: center; font-size: 0.9em; color: #44403C; }
+.latex-preview .latex-bold { font-weight: 700; }
+.latex-preview .latex-italic { font-style: italic; }
+.latex-preview p { margin-bottom: 0.75rem; font-family: 'DM Sans', sans-serif; font-size: 0.93rem; }
+
+/* Animations */
+@layer utilities {
+  .animation-delay-100 { animation-delay: 100ms; }
+  .animation-delay-200 { animation-delay: 200ms; }
+  .animation-delay-300 { animation-delay: 300ms; }
+  .animation-delay-400 { animation-delay: 400ms; }
+}
