@@ -138,6 +138,17 @@ def migrate(conn: sqlite3.Connection) -> None:
           FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
         );
 
+        CREATE TABLE IF NOT EXISTS user_oauth_accounts (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL,
+          provider TEXT NOT NULL CHECK (provider IN ('google', 'github')),
+          provider_user_id TEXT NOT NULL,
+          provider_email TEXT,
+          created_at TEXT NOT NULL,
+          UNIQUE(provider, provider_user_id),
+          FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+
         CREATE TABLE IF NOT EXISTS project_versions (
           id TEXT PRIMARY KEY,
           project_id TEXT NOT NULL,
@@ -506,6 +517,74 @@ def logout(conn: sqlite3.Connection, payload: dict[str, Any]) -> dict[str, Any]:
         conn.execute("DELETE FROM sessions WHERE token = ?", (token,))
         conn.commit()
     return {"success": True}
+
+
+def oauth_login(conn: sqlite3.Connection, payload: dict[str, Any]) -> dict[str, Any]:
+    provider = str(payload.get("provider", "")).strip().lower()
+    provider_user_id = str(payload.get("providerUserId", "")).strip()
+    email = str(payload.get("email", "")).strip().lower()
+    name = str(payload.get("name", "")).strip()
+
+    if provider not in ("google", "github"):
+        raise ValueError("Invalid provider.")
+    if not provider_user_id:
+        raise ValueError("Missing provider user id.")
+    if not email:
+        raise ValueError("Missing email from provider profile.")
+
+    oauth_row = conn.execute(
+        """
+        SELECT u.id, u.name, u.email
+        FROM user_oauth_accounts oa
+        INNER JOIN users u ON u.id = oa.user_id
+        WHERE oa.provider = ? AND oa.provider_user_id = ?
+        """,
+        (provider, provider_user_id),
+    ).fetchone()
+
+    if oauth_row is not None:
+        user_id = oauth_row["id"]
+        user = {"id": oauth_row["id"], "name": oauth_row["name"], "email": oauth_row["email"]}
+    else:
+        user_row = conn.execute(
+            "SELECT id, name, email FROM users WHERE lower(email) = lower(?)",
+            (email,),
+        ).fetchone()
+
+        if user_row is None:
+            user_id = f"u_{uuid.uuid4().hex[:8]}"
+            display_name = name or email.split("@")[0]
+            conn.execute(
+                """
+                INSERT INTO users (id, name, email, password_hash, created_at)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (user_id, display_name, email, hash_password(secrets.token_urlsafe(24)), now_iso()),
+            )
+            user = {"id": user_id, "name": display_name, "email": email}
+        else:
+            user_id = user_row["id"]
+            user = {"id": user_row["id"], "name": user_row["name"], "email": user_row["email"]}
+
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO user_oauth_accounts
+            (id, user_id, provider, provider_user_id, provider_email, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (f"oa_{uuid.uuid4().hex[:10]}", user_id, provider, provider_user_id, email, now_iso()),
+        )
+
+    token = secrets.token_urlsafe(48)
+    conn.execute(
+        """
+        INSERT INTO sessions (token, user_id, created_at, expires_at)
+        VALUES (?, ?, ?, ?)
+        """,
+        (token, user_id, now_iso(), iso_in_days(SESSION_DURATION_DAYS)),
+    )
+    conn.commit()
+    return {"user": user, "sessionToken": token}
 
 
 def collaborator_rows(conn: sqlite3.Connection, project_id: str) -> list[dict[str, Any]]:
@@ -1075,6 +1154,8 @@ def main() -> int:
             data = login(conn, payload)
         elif action == "logout":
             data = logout(conn, payload)
+        elif action == "oauth_login":
+            data = oauth_login(conn, payload)
         elif action == "get_user_by_session":
             token = str(payload.get("sessionToken", "")).strip()
             if not token:

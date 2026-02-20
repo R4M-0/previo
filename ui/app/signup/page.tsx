@@ -5,7 +5,7 @@
 import { useState, FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Eye, EyeOff, ArrowRight, Loader2, Check, X } from "lucide-react";
+import { Eye, EyeOff, ArrowRight, Loader2, Check, X, Github } from "lucide-react";
 
 function PasswordRule({
   met,
@@ -261,6 +261,31 @@ export default function SignupPage() {
               )}
             </button>
           </form>
+
+          <div className="my-5 flex items-center gap-3">
+            <div className="h-px bg-stone-200 flex-1" />
+            <span className="text-[10px] uppercase tracking-widest text-stone-400 font-semibold">or sign up with</span>
+            <div className="h-px bg-stone-200 flex-1" />
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <a
+              href="/api/auth/oauth/google?next=/dashboard"
+              className="inline-flex items-center justify-center gap-2 rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-700 hover:bg-stone-50 transition-colors"
+            >
+              <span className="inline-flex w-4 h-4 items-center justify-center rounded-full bg-white text-[11px] font-bold text-[#DB4437] border border-stone-200">
+                G
+              </span>
+              Google
+            </a>
+            <a
+              href="/api/auth/oauth/github?next=/dashboard"
+              className="inline-flex items-center justify-center gap-2 rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-700 hover:bg-stone-50 transition-colors"
+            >
+              <Github className="w-4 h-4" />
+              GitHub
+            </a>
+          </div>
 
           <div className="mt-6 pt-6 border-t border-stone-200 text-center">
             <p className="text-sm text-stone-500">

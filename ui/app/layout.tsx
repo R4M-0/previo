@@ -5,7 +5,7 @@ import "./globals.css";
 import { ThemeInitializer } from "@/components/theme/ThemeInitializer";
 
 export const metadata: Metadata = {
-  title: "Previo — Collaborative Editor",
+  title: "Previo",
   description: "A collaborative Markdown & LaTeX editor with live preview",
 };
 

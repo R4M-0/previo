@@ -129,6 +129,15 @@ export async function getUserBySession(sessionToken: string): Promise<User> {
   return runDbAction<User>("get_user_by_session", { sessionToken });
 }
 
+export async function oauthLogin(input: {
+  provider: "google" | "github";
+  providerUserId: string;
+  email: string;
+  name: string;
+}): Promise<{ user: User; sessionToken: string }> {
+  return runDbAction<{ user: User; sessionToken: string }>("oauth_login", input);
+}
+
 export async function updateMe(input: {
   userId: string;
   name?: string;
