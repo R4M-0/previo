@@ -788,6 +788,7 @@ def update_project(conn: sqlite3.Connection, payload: dict[str, Any]) -> dict[st
     title = str(payload.get("title", project["title"]))
     fmt = str(payload.get("format", project["format"]))
     content = str(payload.get("content", project["content"]))
+    comment = str(payload.get("comment", "")).strip()
     if fmt not in ("markdown", "latex"):
         raise ValueError("Invalid format. Expected 'markdown' or 'latex'.")
 
@@ -820,6 +821,7 @@ def update_project(conn: sqlite3.Connection, payload: dict[str, Any]) -> dict[st
         old_title=project["title"],
         old_format=project["format"],
         old_content=project["content"],
+        explicit_summary=(comment or None),
     )
     conn.commit()
     updated = get_project(conn, user_id, project_id)

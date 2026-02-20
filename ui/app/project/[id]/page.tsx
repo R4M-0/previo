@@ -109,6 +109,7 @@ export default function ProjectEditorPage() {
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [isSaved, setIsSaved] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [saveComment, setSaveComment] = useState("");
   const [isDownloadingFile, setIsDownloadingFile] = useState(false);
   const [showPreview, setShowPreview] = useState(true);
   const [showCollabModal, setShowCollabModal] = useState(false);
@@ -270,12 +271,26 @@ export default function ProjectEditorPage() {
 
   async function handleSave() {
     if (!project) return;
+    const trimmedComment = saveComment.trim();
+    if (!trimmedComment) {
+      const continueWithoutComment = window.confirm(
+        "No save comment added. Press Cancel to add a comment, or OK to save without one."
+      );
+      if (!continueWithoutComment) {
+        return;
+      }
+    }
+
     setIsSaving(true);
     try {
       const response = await fetch(`/api/projects/${project.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content, format }),
+        body: JSON.stringify({
+          content,
+          format,
+          comment: trimmedComment || undefined,
+        }),
       });
       const data = await response.json();
       if (!response.ok) {
@@ -283,6 +298,7 @@ export default function ProjectEditorPage() {
       }
       setProject(data.project as Project);
       setIsSaved(true);
+      setSaveComment("");
     } catch (error) {
       setPreviewError(error instanceof Error ? error.message : "Failed to save project.");
     } finally {
@@ -573,6 +589,14 @@ export default function ProjectEditorPage() {
               )}
               <span className="hidden sm:inline">{showPreview ? "Hide" : "Preview"}</span>
             </button>
+
+            <input
+              value={saveComment}
+              onChange={(e) => setSaveComment(e.target.value)}
+              maxLength={160}
+              placeholder="Save comment (optional)"
+              className="hidden lg:block w-56 border border-stone-200 rounded-lg px-2.5 py-1.5 text-xs text-ink placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-400/40 focus:border-amber-400 transition-all"
+            />
 
             <button
               onClick={handleSave}
