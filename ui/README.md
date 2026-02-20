@@ -34,6 +34,18 @@ npm run dev
 
 Open `http://localhost:3000`.
 
+## Docker
+
+The recommended container flow is from repo root:
+
+```bash
+docker compose up --build
+```
+
+Notes:
+- `ui/Dockerfile` builds Next.js in standalone mode and runs Node + Python + LaTeX tooling in one container.
+- Backend scripts are mounted at `/app/backend` and called by API routes.
+
 ## Main UI Features
 
 - Auth:
@@ -43,10 +55,13 @@ Open `http://localhost:3000`.
   - Project list + search
   - Invitation notifications with Accept/Deny
   - Detailed writing stats
+  - Delete owned projects
 - Editor:
   - Markdown/LaTeX source + preview
   - Download render (HTML/PDF)
   - Version history + diff + revert
+  - Optional save comment before saving (stored in history)
+  - Auto-sync of remote saved updates without page refresh
 - Collaboration:
   - Invite collaborators by email
   - Shared project access after invite acceptance
@@ -77,4 +92,4 @@ Open `http://localhost:3000`.
 
 - UI depends on Python backend scripts in `../backend`.
 - Restart dev server after changing `.env.local`.
-
+- Next 15 note: pages using `useSearchParams` must be wrapped in a Suspense boundary (already applied for `/login`).
