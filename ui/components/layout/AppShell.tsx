@@ -6,6 +6,7 @@ import { createContext, useContext, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Sidebar } from "./Sidebar";
 import { NewProjectModal } from "@/components/ui/NewProjectModal";
+import { ProjectTemplate } from "@/types";
 
 type AppShellActions = {
   openNewProject: () => void;
@@ -31,12 +32,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     []
   );
 
-  async function handleCreateProject(title: string, format: "markdown" | "latex") {
+  async function handleCreateProject(
+    title: string,
+    format: "markdown" | "latex",
+    template: ProjectTemplate
+  ) {
     try {
       const response = await fetch("/api/projects", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title, format }),
+        body: JSON.stringify({ title, format, template }),
       });
       const data = await response.json();
       if (!response.ok) {

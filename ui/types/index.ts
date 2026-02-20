@@ -7,6 +7,13 @@ export interface User {
   avatar?: string;
 }
 
+export type ProjectTemplate =
+  | "blank"
+  | "thesis"
+  | "report"
+  | "api_docs"
+  | "article";
+
 export interface Project {
   id: string;
   ownerId: string;

@@ -76,6 +76,191 @@ def default_latex_content() -> str:
     )
 
 
+def markdown_template_content(template: str, title: str) -> str:
+    safe_title = title.strip() or "New Document"
+    if template == "thesis":
+        return (
+            f"# {safe_title}\n\n"
+            "## Abstract\n\n"
+            "Write a concise abstract.\n\n"
+            "## Introduction\n\n"
+            "Introduce context, scope, and objectives.\n\n"
+            "## Literature Review\n\n"
+            "Summarize related work and references.\n\n"
+            "## Methodology\n\n"
+            "Describe methods, tools, and datasets.\n\n"
+            "## Results\n\n"
+            "Present findings, tables, and figures.\n\n"
+            "## Conclusion\n\n"
+            "Wrap up and propose future work.\n"
+        )
+    if template == "report":
+        return (
+            f"# {safe_title}\n\n"
+            "## Executive Summary\n\n"
+            "Brief summary of key outcomes.\n\n"
+            "## Context\n\n"
+            "Background and stakeholders.\n\n"
+            "## Scope\n\n"
+            "- In scope\n"
+            "- Out of scope\n\n"
+            "## Deliverables\n\n"
+            "List expected outputs.\n\n"
+            "## Timeline\n\n"
+            "| Milestone | Date |\n"
+            "|---|---|\n"
+            "| Kickoff | TBD |\n"
+            "| Delivery | TBD |\n\n"
+            "## Risks\n\n"
+            "Main risks and mitigation plan.\n"
+        )
+    if template == "api_docs":
+        return (
+            f"# API Documentation: {safe_title}\n\n"
+            "## Base URL\n\n"
+            "`https://api.example.com`\n\n"
+            "## Authentication\n\n"
+            "Bearer token in the `Authorization` header.\n\n"
+            "## Endpoints\n\n"
+            "### GET /resource\n\n"
+            "- Description: List resources\n"
+            "- Response: `200 OK`\n\n"
+            "### POST /resource\n\n"
+            "- Description: Create resource\n"
+            "- Body: JSON payload\n"
+            "- Response: `201 Created`\n\n"
+            "## Error Codes\n\n"
+            "- `400` Bad Request\n"
+            "- `401` Unauthorized\n"
+            "- `404` Not Found\n"
+            "- `500` Internal Server Error\n"
+        )
+    if template == "article":
+        return (
+            f"# {safe_title}\n\n"
+            "## Abstract\n\n"
+            "A short abstract describing the article.\n\n"
+            "## Introduction\n\n"
+            "Present the topic and motivation.\n\n"
+            "## Main Body\n\n"
+            "Develop your arguments and evidence.\n\n"
+            "## Discussion\n\n"
+            "Interpret results and implications.\n\n"
+            "## Conclusion\n\n"
+            "Final takeaways.\n"
+        )
+    return default_markdown_content()
+
+
+def latex_template_content(template: str) -> str:
+    if template == "thesis":
+        return (
+            "\\documentclass[12pt]{report}\n"
+            "\\usepackage[utf8]{inputenc}\n"
+            "\\usepackage[T1]{fontenc}\n\n"
+            "\\begin{document}\n\n"
+            "\\title{Thesis Title}\n"
+            "\\author{Author Name}\n"
+            "\\date{\\today}\n"
+            "\\maketitle\n"
+            "\\tableofcontents\n\n"
+            "\\chapter{Introduction}\n"
+            "Write your introduction.\n\n"
+            "\\chapter{Literature Review}\n"
+            "Summarize related work.\n\n"
+            "\\chapter{Methodology}\n"
+            "Describe your methods.\n\n"
+            "\\chapter{Results}\n"
+            "Present your results.\n\n"
+            "\\chapter{Conclusion}\n"
+            "Conclude and suggest future work.\n\n"
+            "\\end{document}\n"
+        )
+    if template == "report":
+        return (
+            "\\documentclass[12pt]{report}\n"
+            "\\usepackage[utf8]{inputenc}\n"
+            "\\usepackage[T1]{fontenc}\n\n"
+            "\\begin{document}\n\n"
+            "\\title{Project Report}\n"
+            "\\author{Author Name}\n"
+            "\\date{\\today}\n"
+            "\\maketitle\n"
+            "\\tableofcontents\n\n"
+            "\\chapter{Executive Summary}\n"
+            "Summary of the report.\n\n"
+            "\\chapter{Context and Scope}\n"
+            "Define context and scope.\n\n"
+            "\\chapter{Plan and Deliverables}\n"
+            "List milestones and deliverables.\n\n"
+            "\\chapter{Risks and Mitigation}\n"
+            "Document key risks.\n\n"
+            "\\end{document}\n"
+        )
+    if template == "api_docs":
+        return (
+            "\\documentclass[11pt]{article}\n"
+            "\\usepackage[utf8]{inputenc}\n"
+            "\\usepackage[T1]{fontenc}\n"
+            "\\usepackage{hyperref}\n\n"
+            "\\begin{document}\n\n"
+            "\\title{API Documentation}\n"
+            "\\author{Team}\n"
+            "\\date{\\today}\n"
+            "\\maketitle\n"
+            "\\tableofcontents\n\n"
+            "\\section{Base URL}\n"
+            "\\texttt{https://api.example.com}\n\n"
+            "\\section{Authentication}\n"
+            "Use bearer tokens in the Authorization header.\n\n"
+            "\\section{Endpoints}\n"
+            "\\subsection{GET /resource}\n"
+            "List resources.\n\n"
+            "\\subsection{POST /resource}\n"
+            "Create a resource.\n\n"
+            "\\section{Error Codes}\n"
+            "\\begin{itemize}\n"
+            "\\item 400 Bad Request\n"
+            "\\item 401 Unauthorized\n"
+            "\\item 404 Not Found\n"
+            "\\item 500 Internal Server Error\n"
+            "\\end{itemize}\n\n"
+            "\\end{document}\n"
+        )
+    if template == "article":
+        return (
+            "\\documentclass[11pt]{article}\n"
+            "\\usepackage[utf8]{inputenc}\n"
+            "\\usepackage[T1]{fontenc}\n\n"
+            "\\begin{document}\n\n"
+            "\\title{Article Title}\n"
+            "\\author{Author Name}\n"
+            "\\date{\\today}\n"
+            "\\maketitle\n\n"
+            "\\begin{abstract}\n"
+            "Write a concise abstract.\n"
+            "\\end{abstract}\n\n"
+            "\\section{Introduction}\n"
+            "Introduce the topic.\n\n"
+            "\\section{Main Section}\n"
+            "Develop the main argument.\n\n"
+            "\\section{Discussion}\n"
+            "Discuss implications.\n\n"
+            "\\section{Conclusion}\n"
+            "Conclude the article.\n\n"
+            "\\end{document}\n"
+        )
+    return default_latex_content()
+
+
+def template_content(fmt: str, template: str, title: str) -> str:
+    if template == "blank":
+        return default_markdown_content() if fmt == "markdown" else default_latex_content()
+    if fmt == "markdown":
+        return markdown_template_content(template, title)
+    return latex_template_content(template)
+
+
 def color_for_seed(seed: str) -> str:
     palette = ["#E07B54", "#5B8DD9", "#56B870", "#9B6DD4", "#E0A854"]
     return palette[abs(hash(seed)) % len(palette)]
@@ -736,15 +921,18 @@ def create_project(conn: sqlite3.Connection, payload: dict[str, Any]) -> dict[st
     user_id = str(payload.get("userId", "")).strip()
     title = str(payload.get("title", "")).strip()
     fmt = str(payload.get("format", "")).strip()
+    template = str(payload.get("template", "blank")).strip().lower()
     if not user_id:
         raise ValueError("Missing required field: userId")
     if not title:
         raise ValueError("Missing required field: title")
     if fmt not in ("markdown", "latex"):
         raise ValueError("Invalid format. Expected 'markdown' or 'latex'.")
+    if template not in ("blank", "thesis", "report", "api_docs", "article"):
+        raise ValueError("Invalid template.")
 
     project_id = f"p_{uuid.uuid4().hex[:8]}"
-    content = default_markdown_content() if fmt == "markdown" else default_latex_content()
+    content = template_content(fmt, template, title)
     updated_at = now_iso()
 
     conn.execute(
