@@ -4,15 +4,21 @@
 
 import { useState, useEffect, useRef } from "react";
 import { X, Hash, FileCode2, ArrowRight } from "lucide-react";
+import { ProjectTemplate } from "@/types";
 
 interface NewProjectModalProps {
   onClose: () => void;
-  onCreate: (title: string, format: "markdown" | "latex") => void;
+  onCreate: (
+    title: string,
+    format: "markdown" | "latex",
+    template: ProjectTemplate
+  ) => void;
 }
 
 export function NewProjectModal({ onClose, onCreate }: NewProjectModalProps) {
   const [title, setTitle] = useState("");
   const [format, setFormat] = useState<"markdown" | "latex">("markdown");
+  const [template, setTemplate] = useState<ProjectTemplate>("report");
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -27,7 +33,7 @@ export function NewProjectModal({ onClose, onCreate }: NewProjectModalProps) {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!title.trim()) return;
-    onCreate(title.trim(), format);
+    onCreate(title.trim(), format, template);
   }
 
   return (
@@ -110,6 +116,41 @@ export function NewProjectModal({ onClose, onCreate }: NewProjectModalProps) {
                   </p>
                 </div>
               </button>
+            </div>
+          </div>
+
+          {/* Template selector */}
+          <div className="space-y-2">
+            <label className="text-xs font-semibold text-stone-500 uppercase tracking-wider">
+              Template
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { id: "thesis", label: "Thesis", hint: "Research chapters" },
+                { id: "report", label: "Report", hint: "Executive structure" },
+                { id: "api_docs", label: "API Docs", hint: "Endpoints layout" },
+                { id: "article", label: "Article", hint: "Abstract + sections" },
+              ].map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setTemplate(item.id as ProjectTemplate)}
+                  className={`rounded-lg border px-3 py-2 text-left transition-all ${
+                    template === item.id
+                      ? "border-ink bg-ink text-white"
+                      : "border-stone-200 bg-stone-50 text-stone-600 hover:border-stone-300"
+                  }`}
+                >
+                  <p className="text-xs font-semibold">{item.label}</p>
+                  <p
+                    className={`text-[11px] mt-0.5 ${
+                      template === item.id ? "text-stone-300" : "text-stone-400"
+                    }`}
+                  >
+                    {item.hint}
+                  </p>
+                </button>
+              ))}
             </div>
           </div>
 

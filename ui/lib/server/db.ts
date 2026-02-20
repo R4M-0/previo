@@ -5,6 +5,7 @@ import {
   Collaborator,
   Project,
   ProjectInvitation,
+  ProjectTemplate,
   ProjectVersion,
   User,
 } from "@/types";
@@ -83,9 +84,10 @@ export async function getProject(userId: string, projectId: string): Promise<Pro
 export async function createProject(
   userId: string,
   title: string,
-  format: "markdown" | "latex"
+  format: "markdown" | "latex",
+  template: ProjectTemplate = "blank"
 ): Promise<Project> {
-  return runDbAction<Project>("create_project", { userId, title, format });
+  return runDbAction<Project>("create_project", { userId, title, format, template });
 }
 
 export async function updateProject(input: {
