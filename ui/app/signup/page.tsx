@@ -116,7 +116,7 @@ export default function SignupPage() {
         </div>
 
         <div className="relative z-10 text-stone-600 text-xs font-mono">
-          © 2025 Previo. All rights reserved.
+          © 2026 Previo. All rights reserved.
         </div>
       </div>
 
@@ -149,7 +149,7 @@ export default function SignupPage() {
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Omar Chiboub"
+                placeholder="John Doe"
                 autoComplete="name"
                 required
                 className="w-full bg-white border border-stone-200 rounded-lg px-3.5 py-2.5 text-sm text-ink placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-400/40 focus:border-amber-400 transition-all"

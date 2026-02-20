@@ -3,6 +3,12 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Loader2, Save, ShieldCheck } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
+import {
+  ThemePreference,
+  applyThemePreference,
+  getStoredThemePreference,
+  persistThemePreference,
+} from "@/lib/theme";
 import { Project, User } from "@/types";
 
 export default function ProfilePage() {
@@ -16,6 +22,7 @@ export default function ProfilePage() {
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [themePreference, setThemePreference] = useState<ThemePreference>("system");
 
   useEffect(() => {
     async function load() {
@@ -47,6 +54,11 @@ export default function ProfilePage() {
     }
 
     void load();
+  }, []);
+
+  useEffect(() => {
+    const stored = getStoredThemePreference();
+    setThemePreference(stored);
   }, []);
 
   const stats = useMemo(() => {
@@ -95,6 +107,13 @@ export default function ProfilePage() {
     } finally {
       setIsSaving(false);
     }
+  }
+
+  function handleThemeChange(next: ThemePreference) {
+    setThemePreference(next);
+    persistThemePreference(next);
+    applyThemePreference(next);
+    setMessage("Theme preference updated.");
   }
 
   return (
@@ -162,6 +181,33 @@ export default function ProfilePage() {
 
                 <div className="h-px bg-stone-100" />
 
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-stone-600 uppercase tracking-wider">
+                    Theme
+                  </label>
+                  <div className="inline-flex rounded-lg border border-stone-200 overflow-hidden">
+                    {(["system", "light", "dark"] as ThemePreference[]).map((option) => (
+                      <button
+                        key={option}
+                        type="button"
+                        onClick={() => handleThemeChange(option)}
+                        className={`px-4 py-2 text-xs font-medium capitalize transition-colors ${
+                          themePreference === option
+                            ? "bg-ink text-white"
+                            : "bg-stone-50 text-stone-600 hover:bg-stone-100"
+                        }`}
+                      >
+                        {option}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-stone-400">
+                    Default is <span className="font-semibold">System</span>, which follows your OS appearance.
+                  </p>
+                </div>
+
+                <div className="h-px bg-stone-100" />
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
                     <label className="text-xs font-semibold text-stone-600 uppercase tracking-wider">
@@ -218,4 +264,3 @@ export default function ProfilePage() {
     </AppShell>
   );
 }
-
