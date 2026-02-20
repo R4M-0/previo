@@ -612,6 +612,8 @@ def collaborator_rows(conn: sqlite3.Connection, project_id: str) -> list[dict[st
 def project_row_to_dict(conn: sqlite3.Connection, row: sqlite3.Row) -> dict[str, Any]:
     project = dict(row)
     project["updatedAt"] = project.pop("updated_at")
+    if "owner_id" in project:
+        project["ownerId"] = project.pop("owner_id")
     project["collaborators"] = collaborator_rows(conn, project["id"])
     return project
 
@@ -701,7 +703,7 @@ def list_projects(conn: sqlite3.Connection, user_id: str, query: str = "") -> li
     query_sql = f"%{query}%"
     rows = conn.execute(
         """
-        SELECT p.id, p.title, p.format, p.content, p.updated_at
+        SELECT p.id, p.owner_id, p.title, p.format, p.content, p.updated_at
         FROM projects p
         WHERE (
             p.owner_id = ?
@@ -824,6 +826,28 @@ def update_project(conn: sqlite3.Connection, payload: dict[str, Any]) -> dict[st
     if updated is None:
         raise RuntimeError("Failed to update project")
     return updated
+
+
+def delete_project(conn: sqlite3.Connection, payload: dict[str, Any]) -> dict[str, Any]:
+    user_id = str(payload.get("userId", "")).strip()
+    project_id = str(payload.get("id", "")).strip()
+    if not user_id:
+        raise ValueError("Missing required field: userId")
+    if not project_id:
+        raise ValueError("Missing required field: id")
+
+    project = conn.execute(
+        "SELECT id, owner_id FROM projects WHERE id = ?",
+        (project_id,),
+    ).fetchone()
+    if project is None:
+        raise ValueError("Project not found")
+    if project["owner_id"] != user_id:
+        raise ValueError("Only the project owner can delete this project.")
+
+    conn.execute("DELETE FROM projects WHERE id = ?", (project_id,))
+    conn.commit()
+    return {"deleted": True, "id": project_id}
 
 
 def add_collaborator(conn: sqlite3.Connection, payload: dict[str, Any]) -> dict[str, Any]:
@@ -1179,6 +1203,8 @@ def main() -> int:
             data = create_project(conn, payload)
         elif action == "update_project":
             data = update_project(conn, payload)
+        elif action == "delete_project":
+            data = delete_project(conn, payload)
         elif action == "add_collaborator":
             data = add_collaborator(conn, payload)
         elif action == "update_me":
