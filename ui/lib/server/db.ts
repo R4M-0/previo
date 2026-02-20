@@ -94,6 +94,7 @@ export async function updateProject(input: {
   title?: string;
   format?: "markdown" | "latex";
   content?: string;
+  comment?: string;
 }): Promise<Project> {
   return runDbAction<Project>("update_project", input);
 }

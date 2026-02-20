@@ -30,6 +30,7 @@ export async function PATCH(
       title?: string;
       format?: "markdown" | "latex";
       content?: string;
+      comment?: string;
     };
 
     const project = await updateProject({
@@ -38,6 +39,7 @@ export async function PATCH(
       title: body.title,
       format: body.format,
       content: body.content,
+      comment: body.comment,
     });
     return NextResponse.json({ project });
   } catch (error) {
