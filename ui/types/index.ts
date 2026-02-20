@@ -9,6 +9,7 @@ export interface User {
 
 export interface Project {
   id: string;
+  ownerId: string;
   title: string;
   format: "markdown" | "latex";
   updatedAt: string;

@@ -98,6 +98,16 @@ export async function updateProject(input: {
   return runDbAction<Project>("update_project", input);
 }
 
+export async function deleteProject(
+  userId: string,
+  projectId: string
+): Promise<{ deleted: boolean; id: string }> {
+  return runDbAction<{ deleted: boolean; id: string }>("delete_project", {
+    userId,
+    id: projectId,
+  });
+}
+
 export async function addCollaborator(
   userId: string,
   projectId: string,

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getProject, updateProject } from "@/lib/server/db";
+import { deleteProject, getProject, updateProject } from "@/lib/server/db";
 import { requireAuthUser } from "@/lib/server/auth";
 
 export async function GET(
@@ -44,6 +44,29 @@ export async function PATCH(
     const message = error instanceof Error ? error.message : "Failed to update project.";
     const lower = message.toLowerCase();
     const status = lower.includes("unauthorized") ? 401 : lower.includes("not found") ? 404 : 500;
+    return NextResponse.json({ error: message }, { status });
+  }
+}
+
+export async function DELETE(
+  _request: Request,
+  context: { params: Promise<{ id: string }> }
+) {
+  try {
+    const user = await requireAuthUser();
+    const { id } = await context.params;
+    const result = await deleteProject(user.id, id);
+    return NextResponse.json(result);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to delete project.";
+    const lower = message.toLowerCase();
+    const status = lower.includes("unauthorized")
+      ? 401
+      : lower.includes("not found")
+        ? 404
+        : lower.includes("only the project owner")
+          ? 403
+          : 500;
     return NextResponse.json({ error: message }, { status });
   }
 }
