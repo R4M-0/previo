@@ -69,3 +69,9 @@ yarn-error.*
 .yarn/build-state.yml
 .yarn/install-state.gz
 .pnp.*
+
+#python
+__pycache__/
+*.py[cod]
+*$py.class
+backend/data/*.db

@@ -2,7 +2,7 @@
 
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -15,8 +15,8 @@ import {
   FileCode2,
 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
-import { MOCK_PROJECTS, MOCK_USER, formatRelativeDate } from "@/lib/mock";
-import { Project } from "@/types";
+import { formatRelativeDate } from "@/lib/date";
+import { Project, User } from "@/types";
 
 function ProjectCard({ project }: { project: Project }) {
   const router = useRouter();
@@ -85,13 +85,34 @@ function ProjectCard({ project }: { project: Project }) {
 
 export default function DashboardPage() {
   const router = useRouter();
-  const firstName = MOCK_USER.name.split(" ")[0];
-  const latestProject = MOCK_PROJECTS[0];
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [user, setUser] = useState<User | null>(null);
 
-  const markdownCount = MOCK_PROJECTS.filter((p) => p.format === "markdown").length;
-  const latexCount = MOCK_PROJECTS.filter((p) => p.format === "latex").length;
+  useEffect(() => {
+    async function loadData() {
+      try {
+        const [projectsRes, meRes] = await Promise.all([
+          fetch("/api/projects"),
+          fetch("/api/me"),
+        ]);
+        const projectsData = await projectsRes.json();
+        const meData = await meRes.json();
+        if (projectsRes.ok) setProjects(projectsData.projects || []);
+        if (meRes.ok) setUser(meData.user || null);
+      } catch {
+        // Keep the dashboard rendered with empty state.
+      }
+    }
+    void loadData();
+  }, []);
+
+  const firstName = user?.name?.split(" ")[0] || "Writer";
+  const latestProject = projects[0];
+
+  const markdownCount = projects.filter((p) => p.format === "markdown").length;
+  const latexCount = projects.filter((p) => p.format === "latex").length;
   const totalCollabs = new Set(
-    MOCK_PROJECTS.flatMap((p) => p.collaborators.map((c) => c.id))
+    projects.flatMap((p) => p.collaborators.map((c) => c.id))
   ).size;
 
   return (
@@ -117,7 +138,7 @@ export default function DashboardPage() {
 
           {/* Quick actions */}
           <div className="grid grid-cols-2 gap-4 mb-10">
-            <Link href={`/project/${latestProject.id}`}>
+            <Link href={latestProject ? `/project/${latestProject.id}` : "/dashboard"}>
               <div className="group bg-ink text-white rounded-xl p-5 cursor-pointer hover:bg-stone-800 transition-all animate-slide-up opacity-0 animation-delay-100" style={{ animationFillMode: "forwards" }}>
                 <div className="flex items-start justify-between mb-4">
                   <div className="w-9 h-9 bg-white/10 rounded-lg flex items-center justify-center">
@@ -126,7 +147,9 @@ export default function DashboardPage() {
                   <ArrowUpRight className="w-4 h-4 text-stone-500 group-hover:text-white group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all" />
                 </div>
                 <p className="font-semibold text-sm mb-0.5">Continue editing</p>
-                <p className="text-xs text-stone-400 line-clamp-1">{latestProject.title}</p>
+                <p className="text-xs text-stone-400 line-clamp-1">
+                  {latestProject ? latestProject.title : "No projects yet"}
+                </p>
               </div>
             </Link>
 
@@ -149,7 +172,7 @@ export default function DashboardPage() {
           {/* Stats row */}
           <div className="grid grid-cols-3 gap-4 mb-10">
             {[
-              { label: "Total projects", value: MOCK_PROJECTS.length, icon: "📁" },
+              { label: "Total projects", value: projects.length, icon: "📁" },
               { label: "Collaborators", value: totalCollabs, icon: "👥" },
               { label: "LaTeX / Markdown", value: `${latexCount} / ${markdownCount}`, icon: "📄" },
             ].map(({ label, value, icon }, i) => (
@@ -168,11 +191,11 @@ export default function DashboardPage() {
           <div>
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-display text-xl text-ink">Recent projects</h2>
-              <span className="text-xs text-stone-400 font-mono">{MOCK_PROJECTS.length} projects</span>
+              <span className="text-xs text-stone-400 font-mono">{projects.length} projects</span>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              {MOCK_PROJECTS.map((project, i) => (
+              {projects.map((project, i) => (
                 <div
                   key={project.id}
                   style={{ animationDelay: `${i * 80 + 400}ms` }}

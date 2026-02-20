@@ -61,9 +61,22 @@ export default function SignupPage() {
       return;
     }
     setIsLoading(true);
-    // Mock signup — replace with real API call
-    await new Promise((res) => setTimeout(res, 1000));
-    router.push("/dashboard");
+    try {
+      const response = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, email, password }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Signup failed.");
+      }
+      router.push("/dashboard");
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Signup failed.");
+    } finally {
+      setIsLoading(false);
+    }
   }
 
   return (
