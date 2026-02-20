@@ -1,46 +1,54 @@
-FROM node:20-alpine AS deps
+FROM node:20-bookworm-slim AS deps
 
-RUN apk add --no-cache libc6-compat
 WORKDIR /app/ui
 
-COPY package.json package-lock.json ./
+COPY ui/package.json ui/package-lock.json ./
 RUN npm ci
 
-FROM node:20-alpine AS builder
+FROM node:20-bookworm-slim AS builder
 
 WORKDIR /app/ui
 
 COPY --from=deps /app/ui/node_modules ./node_modules
-COPY . .
+COPY ui/. .
 
 ENV NEXT_TELEMETRY_DISABLED=1
 
 RUN npm run build
 
-FROM node:20-alpine AS runner
+FROM node:20-bookworm-slim AS runner
 
-RUN apk add --no-cache python3 py3-pip
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 \
+    python3-pip \
+    texlive-latex-base \
+    texlive-latex-recommended \
+    texlive-latex-extra \
+    texlive-fonts-recommended \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app/ui
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
-
-RUN addgroup --system --gid 1001 nodejs \
-    && adduser --system --uid 1001 nextjs
-
-COPY --from=builder /app/ui/public ./public
-COPY --from=builder --chown=nextjs:nodejs /app/ui/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/ui/.next/static ./.next/static
-
-# Install backend Python dependencies
-RUN pip3 install --no-cache-dir --break-system-packages markdown
-
-USER nextjs
-
-EXPOSE 3000
-
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
+
+COPY --from=builder /app/ui/public ./public
+COPY --from=builder --chown=node:node /app/ui/.next/standalone ./
+COPY --from=builder --chown=node:node /app/ui/.next/static ./.next/static
+
+# Install backend Python dependencies in the UI runtime container because
+# Next.js API routes spawn backend scripts from /app/backend.
+COPY backend/requirements.txt /tmp/backend-requirements.txt
+RUN python3 -m pip install --no-cache-dir --break-system-packages -r /tmp/backend-requirements.txt \
+    && rm -f /tmp/backend-requirements.txt
+
+RUN mkdir -p /app/backend/data \
+    && chown -R node:node /app/backend
+
+USER node
+
+EXPOSE 3000
 
 CMD ["node", "server.js"]

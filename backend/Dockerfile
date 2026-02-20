@@ -18,6 +18,6 @@ COPY . .
 # Ensure the data directory exists for SQLite
 RUN mkdir -p /app/backend/data
 
-# This image is used as a base/sidecar; no default CMD needed.
-# Scripts are invoked directly by the UI via child_process.
-CMD ["python3", "--version"]
+# Utility image for running backend scripts directly, e.g.:
+# docker run --rm -it <image> python3 db/sqlite_service.py --action list_projects
+CMD ["python3", "db/sqlite_service.py", "--help"]
