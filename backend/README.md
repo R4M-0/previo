@@ -50,7 +50,7 @@ Key actions include:
 
 - Auth: `signup`, `login`, `logout`, `oauth_login`, `get_user_by_session`
 - User: `update_me`
-- Projects: `list_projects`, `get_project`, `create_project`, `update_project`
+- Projects: `list_projects`, `get_project`, `create_project`, `update_project`, `delete_project`
 - Collaboration: `add_collaborator`, `list_invitations`, `respond_invitation`
 - Versioning: `list_project_versions`, `revert_project_version`
 
@@ -87,4 +87,5 @@ cat sample.tex | python3 backend/latex/latex_renderer.py --stdin --output-file /
 - SQLite migrations run automatically inside `sqlite_service.py`.
 - OAuth credentials are read by the UI layer (Next.js routes), not by these Python scripts directly.
 - Keep `backend/data/*.db` out of version control.
-
+- `update_project` accepts optional `comment`; when provided it becomes the version `changeSummary`.
+- In Docker, scripts run from the UI container runtime (not as a separate backend service).
