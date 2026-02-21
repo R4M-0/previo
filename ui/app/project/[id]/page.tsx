@@ -888,9 +888,31 @@ export default function ProjectEditorPage() {
                     <p className="text-xs font-semibold text-stone-500 uppercase tracking-wider mb-2">
                       Selected version diff
                     </p>
-                    <pre className="text-[11px] leading-relaxed whitespace-pre-wrap bg-stone-900 text-stone-100 rounded-lg p-3 overflow-x-auto">
-                      {selectedVersion.diffText}
-                    </pre>
+                    <div className="text-[11px] leading-relaxed whitespace-pre-wrap bg-stone-900 text-stone-100 rounded-lg p-3 overflow-x-auto font-mono space-y-1">
+                      {selectedVersion.diffText.split("\n").map((line, index) => {
+                        let lineClass = "text-stone-100";
+
+                        if (line.startsWith("+") && !line.startsWith("+++")) {
+                          lineClass = "bg-green-900/40 text-green-200";
+                        } else if (line.startsWith("-") && !line.startsWith("---")) {
+                          lineClass = "bg-red-900/40 text-red-200";
+                        } else if (
+                          line.startsWith("@@") ||
+                          line.startsWith("diff ") ||
+                          line.startsWith("index ") ||
+                          line.startsWith("+++ ") ||
+                          line.startsWith("--- ")
+                        ) {
+                          lineClass = "text-sky-200";
+                        }
+
+                        return (
+                          <div key={`${selectedVersion.id}-${index}`} className={`px-2 py-0.5 rounded ${lineClass}`}>
+                            {line || " "}
+                          </div>
+                        );
+                      })}
+                    </div>
                   </>
                 ) : (
                   <p className="text-sm text-stone-400">Select a version to inspect its changes.</p>
