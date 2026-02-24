@@ -14,8 +14,8 @@ type DbResponse<T> = { ok: true; data: T } | { ok: false; error: string };
 
 function resolveDbScript(): string {
   const candidates = [
-    path.resolve(process.cwd(), "../backend/db/sqlite_service.py"),
-    path.resolve(process.cwd(), "backend/db/sqlite_service.py"),
+    path.resolve(process.cwd(), "../backend/db/postgres_service.py"),
+    path.resolve(process.cwd(), "backend/db/postgres_service.py"),
   ];
 
   for (const candidate of candidates) {
@@ -23,7 +23,7 @@ function resolveDbScript(): string {
       return candidate;
     }
   }
-  throw new Error("SQLite service script not found.");
+  throw new Error("Database service script not found.");
 }
 
 function runDbAction<T>(action: string, payload?: object): Promise<T> {

@@ -44,7 +44,7 @@ COPY backend/requirements.txt /tmp/backend-requirements.txt
 RUN python3 -m pip install --no-cache-dir --break-system-packages -r /tmp/backend-requirements.txt \
     && rm -f /tmp/backend-requirements.txt
 
-RUN mkdir -p /app/backend/data \
+RUN mkdir -p /app/backend \
     && chown -R node:node /app/backend
 
 USER node

@@ -4,8 +4,8 @@ Python backend services used by the Next.js UI.
 
 ## What’s here
 
-- `db/sqlite_service.py`
-  - SQLite data layer and auth/collaboration/version logic
+- `db/postgres_service.py`
+  - PostgreSQL data layer and auth/collaboration/version logic
   - Exposed through UI API routes (the UI spawns this script)
 - `markdown/markdown_preview.py`
   - Markdown -> preview payload (HTML JSON)
@@ -15,12 +15,10 @@ Python backend services used by the Next.js UI.
   - LaTeX -> preview payload (base64/data-url PDF)
 - `latex/latex_renderer.py`
   - LaTeX -> downloadable PDF file
-- `data/previo.db`
-  - SQLite database (runtime file)
-
 ## Requirements
 
 - Python 3.10+
+- PostgreSQL 14+
 - LaTeX compiler (`pdflatex`) for LaTeX render/preview
 
 Install dependencies:
@@ -31,19 +29,19 @@ source .venv/bin/activate
 pip install -r backend/requirements.txt
 ```
 
-## SQLite Service Usage
+## PostgreSQL Service Usage
 
 General form:
 
 ```bash
-python3 backend/db/sqlite_service.py --action <action> --stdin
+python3 backend/db/postgres_service.py --action <action> --stdin
 ```
 
 Example:
 
 ```bash
 echo '{"email":"omar@previo.app","password":"Password1"}' \
-  | python3 backend/db/sqlite_service.py --action login --stdin
+  | python3 backend/db/postgres_service.py --action login --stdin
 ```
 
 Key actions include:
@@ -84,8 +82,7 @@ cat sample.tex | python3 backend/latex/latex_renderer.py --stdin --output-file /
 
 ## Notes
 
-- SQLite migrations run automatically inside `sqlite_service.py`.
+- PostgreSQL migrations run automatically inside `postgres_service.py`.
 - OAuth credentials are read by the UI layer (Next.js routes), not by these Python scripts directly.
-- Keep `backend/data/*.db` out of version control.
 - `update_project` accepts optional `comment`; when provided it becomes the version `changeSummary`.
 - In Docker, scripts run from the UI container runtime (not as a separate backend service).
