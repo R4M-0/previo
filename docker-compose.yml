@@ -9,8 +9,6 @@ services:
       # Mount backend scripts so the UI can spawn them via child_process.
       # Resolves to /app/backend inside the container (../backend relative to /app/ui).
       - ./backend:/app/backend
-      # Persist the SQLite database across container restarts (host bind mount).
-      - ./backend/data:/app/backend/data
     environment:
       NODE_ENV: production
       # Public app URL used for OAuth redirect URIs

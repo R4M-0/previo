@@ -9,6 +9,7 @@ import argparse
 import difflib
 import hashlib
 import json
+import os
 import secrets
 import sqlite3
 import uuid
@@ -17,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
-DB_PATH = ROOT / "backend" / "data" / "previo.db"
+DEFAULT_DB_PATH = ROOT / "backend" / "data" / "previo.db"
 SESSION_DURATION_DAYS = 14
 
 
@@ -266,12 +267,31 @@ def color_for_seed(seed: str) -> str:
     return palette[abs(hash(seed)) % len(palette)]
 
 
-def get_conn() -> sqlite3.Connection:
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
+def configured_db_path() -> Path:
+    raw = os.getenv("PREVIO_DB_PATH", "").strip()
+    return Path(raw) if raw else DEFAULT_DB_PATH
+
+
+def open_conn(db_path: Path) -> sqlite3.Connection:
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON;")
     return conn
+
+
+def get_conn() -> sqlite3.Connection:
+    primary = configured_db_path()
+    try:
+        return open_conn(primary)
+    except sqlite3.OperationalError as err:
+        # Keep auth/project APIs usable when bind-mounted DB path is not writable.
+        if "unable to open database file" not in str(err).lower():
+            raise
+        fallback = Path("/tmp/previo.db")
+        if primary == fallback:
+            raise
+        return open_conn(fallback)
 
 
 def has_column(conn: sqlite3.Connection, table: str, column: str) -> bool:

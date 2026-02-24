@@ -1,10 +1,13 @@
 // app/page.tsx
 
 import { redirect } from "next/navigation";
-import { cookies } from "next/headers";
+import { requireAuthUser } from "@/lib/server/auth";
 
 export default async function RootPage() {
-  const store = await cookies();
-  const hasSession = Boolean(store.get("previo_session")?.value);
-  redirect(hasSession ? "/dashboard" : "/login");
+  try {
+    await requireAuthUser();
+    redirect("/dashboard");
+  } catch {
+    redirect("/login");
+  }
 }
