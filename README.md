@@ -2,7 +2,7 @@
 
 Collaborative Markdown + LaTeX writing platform with:
 - real authentication (email/password + Google + GitHub OAuth)
-- SQLite-backed projects and collaboration
+- PostgreSQL-backed projects and collaboration
 - live preview/rendering (Markdown + LaTeX)
 - version history with revert
 - invitation workflow (accept/deny)
@@ -15,15 +15,13 @@ Collaborative Markdown + LaTeX writing platform with:
 previo/
 ├── backend/
 │   ├── db/
-│   │   └── sqlite_service.py      # SQLite data/auth/collab/version logic
+│   │   └── postgres_service.py    # PostgreSQL data/auth/collab/version logic
 │   ├── latex/
 │   │   ├── latex_preview.py       # LaTeX -> preview payload (PDF data URL)
 │   │   └── latex_renderer.py      # LaTeX -> downloadable PDF
 │   ├── markdown/
 │   │   ├── markdown_preview.py    # Markdown -> preview payload
 │   │   └── markdown_renderer.py   # Markdown -> downloadable HTML
-│   ├── data/
-│   │   └── previo.db              # SQLite database (created at runtime)
 │   └── requirements.txt
 └── ui/
     ├── app/                       # Next.js app routes + API routes
@@ -38,6 +36,7 @@ previo/
 - Node.js 18+
 - npm
 - Python 3.10+
+- PostgreSQL 14+ (or Docker Compose service)
 - LaTeX compiler (`pdflatex`) available in PATH
 - Docker + Docker Compose (optional)
 
@@ -58,9 +57,19 @@ cd ui
 npm install
 ```
 
-### 3. Environment variables (`ui/.env.local`)
+### 3. Environment variables
 
-Create `ui/.env.local`:
+Create root `.env` (used by Docker Compose):
+
+```env
+POSTGRES_DB=previo
+POSTGRES_USER=previo
+POSTGRES_PASSWORD=previo
+PREVIO_DATABASE_URL=postgresql://previo:previo@postgres:5432/previo
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+```
+
+For local non-Docker UI runs, create `ui/.env.local`:
 
 ```env
 # OAuth
@@ -72,6 +81,9 @@ GITHUB_CLIENT_SECRET=...
 # App URL (used for OAuth callback URL construction)
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 APP_URL=http://localhost:3000
+
+# DB connection used by backend scripts
+PREVIO_DATABASE_URL=postgresql://previo:previo@postgres:5432/previo
 ```
 
 ## Run
@@ -93,7 +105,7 @@ Open `http://localhost:3000`.
 
 Notes:
 - The UI container runs Next.js and invokes Python backend scripts locally.
-- SQLite is persisted in `backend/data`.
+- PostgreSQL data is persisted in the `postgres_data` Docker volume.
 
 ## OAuth Callback URLs
 
@@ -133,7 +145,6 @@ Configure these in provider dashboards:
 
 ## Notes
 
-- SQLite DB file is `backend/data/previo.db`.
 - If you change DB schema logic, restart the app and re-run flows to verify migration paths.
 - Rotate OAuth secrets if they were shared in plain text.
 - For production images, `ui/next.config.js` is configured with `output: "standalone"`.

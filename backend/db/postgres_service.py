@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
-"""
-SQLite service used by Next.js API routes.
-"""
+"""PostgreSQL service used by Next.js API routes."""
 
 from __future__ import annotations
 
@@ -11,14 +9,16 @@ import hashlib
 import json
 import os
 import secrets
-import sqlite3
+import psycopg
+from psycopg.rows import dict_row
 import uuid
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from typing import Any
 
-ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_DB_PATH = ROOT / "backend" / "data" / "previo.db"
+DEFAULT_DATABASE_URL = os.getenv(
+    "PREVIO_DATABASE_URL",
+    os.getenv("DATABASE_URL", "postgresql://previo:previo@postgres:5432/previo"),
+)
 SESSION_DURATION_DAYS = 14
 
 
@@ -267,47 +267,33 @@ def color_for_seed(seed: str) -> str:
     return palette[abs(hash(seed)) % len(palette)]
 
 
-def configured_db_path() -> Path:
-    raw = os.getenv("PREVIO_DB_PATH", "").strip()
-    return Path(raw) if raw else DEFAULT_DB_PATH
+def get_conn() -> Any:
+    return psycopg.connect(DEFAULT_DATABASE_URL, row_factory=dict_row)
 
 
-def open_conn(db_path: Path) -> sqlite3.Connection:
-    db_path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON;")
-    return conn
+def has_column(conn: Any, table: str, column: str) -> bool:
+    row = conn.execute(
+        """
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = %s
+          AND column_name = %s
+        """,
+        (table, column),
+    ).fetchone()
+    return row is not None
 
 
-def get_conn() -> sqlite3.Connection:
-    primary = configured_db_path()
-    try:
-        return open_conn(primary)
-    except sqlite3.OperationalError as err:
-        # Keep auth/project APIs usable when bind-mounted DB path is not writable.
-        if "unable to open database file" not in str(err).lower():
-            raise
-        fallback = Path("/tmp/previo.db")
-        if primary == fallback:
-            raise
-        return open_conn(fallback)
-
-
-def has_column(conn: sqlite3.Connection, table: str, column: str) -> bool:
-    rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
-    return any(r["name"] == column for r in rows)
-
-
-def migrate(conn: sqlite3.Connection) -> None:
-    conn.executescript(
+def migrate(conn: Any) -> None:
+    conn.execute(
         """
         CREATE TABLE IF NOT EXISTS users (
           id TEXT PRIMARY KEY,
           name TEXT NOT NULL,
           email TEXT NOT NULL UNIQUE,
           password_hash TEXT,
-          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+          created_at TEXT NOT NULL
         );
 
         CREATE TABLE IF NOT EXISTS collaborators (
@@ -394,20 +380,20 @@ def migrate(conn: sqlite3.Connection) -> None:
     )
 
     if not has_column(conn, "users", "password_hash"):
-        conn.execute("ALTER TABLE users ADD COLUMN password_hash TEXT")
+        conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT")
     if not has_column(conn, "users", "created_at"):
-        conn.execute("ALTER TABLE users ADD COLUMN created_at TEXT")
-        conn.execute("UPDATE users SET created_at = ? WHERE created_at IS NULL", (now_iso(),))
+        conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TEXT")
+        conn.execute("UPDATE users SET created_at = %s WHERE created_at IS NULL", (now_iso(),))
 
     if not has_column(conn, "projects", "owner_id"):
-        conn.execute("ALTER TABLE projects ADD COLUMN owner_id TEXT")
+        conn.execute("ALTER TABLE projects ADD COLUMN IF NOT EXISTS owner_id TEXT")
         first_user = conn.execute("SELECT id FROM users ORDER BY id LIMIT 1").fetchone()
         if first_user is None:
             first_user_id = "u1"
             conn.execute(
                 """
                 INSERT INTO users (id, name, email, password_hash, created_at)
-                VALUES (?, ?, ?, ?, ?)
+                VALUES (%s, %s, %s, %s, %s)
                 """,
                 (
                     first_user_id,
@@ -420,7 +406,7 @@ def migrate(conn: sqlite3.Connection) -> None:
         else:
             first_user_id = first_user["id"]
         conn.execute(
-            "UPDATE projects SET owner_id = ? WHERE owner_id IS NULL OR owner_id = ''",
+            "UPDATE projects SET owner_id = %s WHERE owner_id IS NULL OR owner_id = ''",
             (first_user_id,),
         )
 
@@ -429,7 +415,7 @@ def migrate(conn: sqlite3.Connection) -> None:
     ).fetchall()
     for row in users_missing_hash:
         conn.execute(
-            "UPDATE users SET password_hash = ? WHERE id = ?",
+            "UPDATE users SET password_hash = %s WHERE id = %s",
             (hash_password("Password1"), row["id"]),
         )
 
@@ -448,21 +434,22 @@ def migrate(conn: sqlite3.Connection) -> None:
         ).fetchall()
         for row in rows:
             user = conn.execute(
-                "SELECT id FROM users WHERE lower(email) = lower(?)",
+                "SELECT id FROM users WHERE lower(email) = lower(%s)",
                 (row["email"],),
             ).fetchone()
             if user and user["id"] != row["owner_id"]:
                 conn.execute(
                     """
-                    INSERT OR IGNORE INTO project_members (project_id, user_id, added_by_user_id, added_at)
-                    VALUES (?, ?, ?, ?)
+                    INSERT INTO project_members (project_id, user_id, added_by_user_id, added_at)
+                    VALUES (%s, %s, %s, %s)
+                    ON CONFLICT DO NOTHING
                     """,
                     (row["project_id"], user["id"], row["owner_id"], now_iso()),
                 )
         conn.commit()
 
 
-def seed_initial_versions(conn: sqlite3.Connection) -> None:
+def seed_initial_versions(conn: Any) -> None:
     rows = conn.execute(
         """
         SELECT p.id, p.owner_id, p.title, p.format, p.content
@@ -488,7 +475,7 @@ def seed_initial_versions(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
-def seed_if_empty(conn: sqlite3.Connection) -> None:
+def seed_if_empty(conn: Any) -> None:
     users_count = conn.execute("SELECT COUNT(*) AS c FROM users").fetchone()["c"]
     if users_count > 0:
         return
@@ -497,7 +484,7 @@ def seed_if_empty(conn: sqlite3.Connection) -> None:
     conn.execute(
         """
         INSERT INTO users (id, name, email, password_hash, created_at)
-        VALUES (?, ?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s, %s)
         """,
         ("u1", "Omar Chiboub", "omar@previo.app", hash_password("Password1"), now),
     )
@@ -507,10 +494,11 @@ def seed_if_empty(conn: sqlite3.Connection) -> None:
         ("c2", "Louay Dardouri", "louay@previo.app", "#5B8DD9"),
         ("c3", "Amin Khalsi", "amin@previo.app", "#56B870"),
     ]
-    conn.executemany(
-        "INSERT OR IGNORE INTO collaborators (id, name, email, color) VALUES (?, ?, ?, ?)",
-        collaborators,
-    )
+    for collaborator in collaborators:
+        conn.execute(
+            "INSERT INTO collaborators (id, name, email, color) VALUES (%s, %s, %s, %s) ON CONFLICT DO NOTHING",
+            collaborator,
+        )
 
     projects = [
         (
@@ -530,21 +518,25 @@ def seed_if_empty(conn: sqlite3.Connection) -> None:
             now,
         ),
     ]
-    conn.executemany(
-        """
-        INSERT OR IGNORE INTO projects (id, owner_id, title, format, content, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?)
-        """,
-        projects,
-    )
+    for project in projects:
+        conn.execute(
+            """
+            INSERT INTO projects (id, owner_id, title, format, content, updated_at)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            ON CONFLICT DO NOTHING
+            """,
+            project,
+        )
 
-    conn.executemany(
-        """
-        INSERT OR IGNORE INTO project_collaborators (project_id, collaborator_id)
-        VALUES (?, ?)
-        """,
-        [("p1", "c1"), ("p1", "c2"), ("p2", "c3")],
-    )
+    for project_collaborator in [("p1", "c1"), ("p1", "c2"), ("p2", "c3")]:
+        conn.execute(
+            """
+            INSERT INTO project_collaborators (project_id, collaborator_id)
+            VALUES (%s, %s)
+            ON CONFLICT DO NOTHING
+            """,
+            project_collaborator,
+        )
     for project in projects:
         project_id, owner_id, title, fmt, content, _updated_at = project
         create_version_entry(
@@ -562,25 +554,25 @@ def seed_if_empty(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
-def public_user(row: sqlite3.Row | None) -> dict[str, Any] | None:
+def public_user(row: dict[str, Any] | None) -> dict[str, Any] | None:
     if row is None:
         return None
     return {"id": row["id"], "name": row["name"], "email": row["email"]}
 
 
 def get_accessible_project(
-    conn: sqlite3.Connection, user_id: str, project_id: str
-) -> sqlite3.Row | None:
+    conn: Any, user_id: str, project_id: str
+) -> dict[str, Any] | None:
     return conn.execute(
         """
         SELECT p.id, p.owner_id, p.title, p.format, p.content, p.updated_at
         FROM projects p
-        WHERE p.id = ?
+        WHERE p.id = %s
           AND (
-            p.owner_id = ?
+            p.owner_id = %s
             OR EXISTS (
               SELECT 1 FROM project_members pm
-              WHERE pm.project_id = p.id AND pm.user_id = ?
+              WHERE pm.project_id = p.id AND pm.user_id = %s
             )
           )
         """,
@@ -588,32 +580,32 @@ def get_accessible_project(
     ).fetchone()
 
 
-def session_user(conn: sqlite3.Connection, token: str) -> dict[str, Any] | None:
+def session_user(conn: Any, token: str) -> dict[str, Any] | None:
     row = conn.execute(
         """
         SELECT u.id, u.name, u.email, s.expires_at
         FROM sessions s
         INNER JOIN users u ON u.id = s.user_id
-        WHERE s.token = ?
+        WHERE s.token = %s
         """,
         (token,),
     ).fetchone()
     if row is None:
         return None
     if datetime.fromisoformat(row["expires_at"]) <= now_utc():
-        conn.execute("DELETE FROM sessions WHERE token = ?", (token,))
+        conn.execute("DELETE FROM sessions WHERE token = %s", (token,))
         conn.commit()
         return None
     return {"id": row["id"], "name": row["name"], "email": row["email"]}
 
 
-def update_me(conn: sqlite3.Connection, payload: dict[str, Any]) -> dict[str, Any]:
+def update_me(conn: Any, payload: dict[str, Any]) -> dict[str, Any]:
     user_id = str(payload.get("userId", "")).strip()
     if not user_id:
         raise ValueError("Missing required field: userId")
 
     row = conn.execute(
-        "SELECT id, name, email, password_hash FROM users WHERE id = ?",
+        "SELECT id, name, email, password_hash FROM users WHERE id = %s",
         (user_id,),
     ).fetchone()
     if row is None:
@@ -630,7 +622,7 @@ def update_me(conn: sqlite3.Connection, payload: dict[str, Any]) -> dict[str, An
         raise ValueError("Email cannot be empty.")
 
     if email != row["email"]:
-        exists = conn.execute("SELECT id FROM users WHERE email = ?", (email,)).fetchone()
+        exists = conn.execute("SELECT id FROM users WHERE email = %s", (email,)).fetchone()
         if exists and exists["id"] != user_id:
             raise ValueError("An account with this email already exists.")
 
@@ -647,21 +639,21 @@ def update_me(conn: sqlite3.Connection, payload: dict[str, Any]) -> dict[str, An
     conn.execute(
         """
         UPDATE users
-        SET name = ?, email = ?, password_hash = ?
-        WHERE id = ?
+        SET name = %s, email = %s, password_hash = %s
+        WHERE id = %s
         """,
         (name, email, password_hash, user_id),
     )
     conn.commit()
 
     updated = conn.execute(
-        "SELECT id, name, email FROM users WHERE id = ?",
+        "SELECT id, name, email FROM users WHERE id = %s",
         (user_id,),
     ).fetchone()
     return public_user(updated) or {}
 
 
-def signup(conn: sqlite3.Connection, payload: dict[str, Any]) -> dict[str, Any]:
+def signup(conn: Any, payload: dict[str, Any]) -> dict[str, Any]:
     name = str(payload.get("name", "")).strip()
     email = str(payload.get("email", "")).strip().lower()
     password = str(payload.get("password", ""))
@@ -673,7 +665,7 @@ def signup(conn: sqlite3.Connection, payload: dict[str, Any]) -> dict[str, Any]:
     if len(password) < 8:
         raise ValueError("Password must be at least 8 characters.")
 
-    exists = conn.execute("SELECT id FROM users WHERE email = ?", (email,)).fetchone()
+    exists = conn.execute("SELECT id FROM users WHERE email = %s", (email,)).fetchone()
     if exists:
         raise ValueError("An account with this email already exists.")
 
@@ -681,25 +673,25 @@ def signup(conn: sqlite3.Connection, payload: dict[str, Any]) -> dict[str, Any]:
     conn.execute(
         """
         INSERT INTO users (id, name, email, password_hash, created_at)
-        VALUES (?, ?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s, %s)
         """,
         (user_id, name, email, hash_password(password), now_iso()),
     )
     conn.commit()
-    row = conn.execute("SELECT id, name, email FROM users WHERE id = ?", (user_id,)).fetchone()
+    row = conn.execute("SELECT id, name, email FROM users WHERE id = %s", (user_id,)).fetchone()
     if row is None:
         raise RuntimeError("Failed to create user")
     return public_user(row) or {}
 
 
-def login(conn: sqlite3.Connection, payload: dict[str, Any]) -> dict[str, Any]:
+def login(conn: Any, payload: dict[str, Any]) -> dict[str, Any]:
     email = str(payload.get("email", "")).strip().lower()
     password = str(payload.get("password", ""))
     if not email or not password:
         raise ValueError("Missing required fields: email, password")
 
     row = conn.execute(
-        "SELECT id, name, email, password_hash FROM users WHERE email = ?", (email,)
+        "SELECT id, name, email, password_hash FROM users WHERE email = %s", (email,)
     ).fetchone()
     if row is None or not verify_password(password, row["password_hash"] or ""):
         raise ValueError("Invalid email or password.")
@@ -708,7 +700,7 @@ def login(conn: sqlite3.Connection, payload: dict[str, Any]) -> dict[str, Any]:
     conn.execute(
         """
         INSERT INTO sessions (token, user_id, created_at, expires_at)
-        VALUES (?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s)
         """,
         (token, row["id"], now_iso(), iso_in_days(SESSION_DURATION_DAYS)),
     )
@@ -716,15 +708,15 @@ def login(conn: sqlite3.Connection, payload: dict[str, Any]) -> dict[str, Any]:
     return {"user": public_user(row), "sessionToken": token}
 
 
-def logout(conn: sqlite3.Connection, payload: dict[str, Any]) -> dict[str, Any]:
+def logout(conn: Any, payload: dict[str, Any]) -> dict[str, Any]:
     token = str(payload.get("sessionToken", "")).strip()
     if token:
-        conn.execute("DELETE FROM sessions WHERE token = ?", (token,))
+        conn.execute("DELETE FROM sessions WHERE token = %s", (token,))
         conn.commit()
     return {"success": True}
 
 
-def oauth_login(conn: sqlite3.Connection, payload: dict[str, Any]) -> dict[str, Any]:
+def oauth_login(conn: Any, payload: dict[str, Any]) -> dict[str, Any]:
     provider = str(payload.get("provider", "")).strip().lower()
     provider_user_id = str(payload.get("providerUserId", "")).strip()
     email = str(payload.get("email", "")).strip().lower()
@@ -742,7 +734,7 @@ def oauth_login(conn: sqlite3.Connection, payload: dict[str, Any]) -> dict[str, 
         SELECT u.id, u.name, u.email
         FROM user_oauth_accounts oa
         INNER JOIN users u ON u.id = oa.user_id
-        WHERE oa.provider = ? AND oa.provider_user_id = ?
+        WHERE oa.provider = %s AND oa.provider_user_id = %s
         """,
         (provider, provider_user_id),
     ).fetchone()
@@ -752,7 +744,7 @@ def oauth_login(conn: sqlite3.Connection, payload: dict[str, Any]) -> dict[str, 
         user = {"id": oauth_row["id"], "name": oauth_row["name"], "email": oauth_row["email"]}
     else:
         user_row = conn.execute(
-            "SELECT id, name, email FROM users WHERE lower(email) = lower(?)",
+            "SELECT id, name, email FROM users WHERE lower(email) = lower(%s)",
             (email,),
         ).fetchone()
 
@@ -762,7 +754,7 @@ def oauth_login(conn: sqlite3.Connection, payload: dict[str, Any]) -> dict[str, 
             conn.execute(
                 """
                 INSERT INTO users (id, name, email, password_hash, created_at)
-                VALUES (?, ?, ?, ?, ?)
+                VALUES (%s, %s, %s, %s, %s)
                 """,
                 (user_id, display_name, email, hash_password(secrets.token_urlsafe(24)), now_iso()),
             )
@@ -773,9 +765,10 @@ def oauth_login(conn: sqlite3.Connection, payload: dict[str, Any]) -> dict[str, 
 
         conn.execute(
             """
-            INSERT OR IGNORE INTO user_oauth_accounts
+            INSERT INTO user_oauth_accounts
             (id, user_id, provider, provider_user_id, provider_email, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            ON CONFLICT DO NOTHING
             """,
             (f"oa_{uuid.uuid4().hex[:10]}", user_id, provider, provider_user_id, email, now_iso()),
         )
@@ -784,7 +777,7 @@ def oauth_login(conn: sqlite3.Connection, payload: dict[str, Any]) -> dict[str, 
     conn.execute(
         """
         INSERT INTO sessions (token, user_id, created_at, expires_at)
-        VALUES (?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s)
         """,
         (token, user_id, now_iso(), iso_in_days(SESSION_DURATION_DAYS)),
     )
@@ -792,13 +785,13 @@ def oauth_login(conn: sqlite3.Connection, payload: dict[str, Any]) -> dict[str, 
     return {"user": user, "sessionToken": token}
 
 
-def collaborator_rows(conn: sqlite3.Connection, project_id: str) -> list[dict[str, Any]]:
+def collaborator_rows(conn: Any, project_id: str) -> list[dict[str, Any]]:
     rows = conn.execute(
         """
         SELECT u.id, u.name, u.email
         FROM project_members pm
         INNER JOIN users u ON u.id = pm.user_id
-        WHERE pm.project_id = ?
+        WHERE pm.project_id = %s
         ORDER BY u.name
         """,
         (project_id,),
@@ -814,7 +807,7 @@ def collaborator_rows(conn: sqlite3.Connection, project_id: str) -> list[dict[st
     ]
 
 
-def project_row_to_dict(conn: sqlite3.Connection, row: sqlite3.Row) -> dict[str, Any]:
+def project_row_to_dict(conn: Any, row: dict[str, Any]) -> dict[str, Any]:
     project = dict(row)
     project["updatedAt"] = project.pop("updated_at")
     if "owner_id" in project:
@@ -861,7 +854,7 @@ def build_change_summary(
 
 
 def create_version_entry(
-    conn: sqlite3.Connection,
+    conn: Any,
     *,
     project_id: str,
     actor_user_id: str,
@@ -884,7 +877,7 @@ def create_version_entry(
           id, project_id, actor_user_id, snapshot_title, snapshot_format, snapshot_content,
           change_summary, diff_text, created_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
         """,
         (
             version_id,
@@ -900,7 +893,7 @@ def create_version_entry(
     )
 
 
-def list_projects(conn: sqlite3.Connection, user_id: str, query: str = "") -> list[dict[str, Any]]:
+def list_projects(conn: Any, user_id: str, query: str = "") -> list[dict[str, Any]]:
     if not user_id:
         raise ValueError("Missing required field: userId")
 
@@ -911,33 +904,33 @@ def list_projects(conn: sqlite3.Connection, user_id: str, query: str = "") -> li
         SELECT p.id, p.owner_id, p.title, p.format, p.content, p.updated_at
         FROM projects p
         WHERE (
-            p.owner_id = ?
+            p.owner_id = %s
             OR EXISTS (
               SELECT 1 FROM project_members pm
-              WHERE pm.project_id = p.id AND pm.user_id = ?
+              WHERE pm.project_id = p.id AND pm.user_id = %s
             )
           )
           AND (
-            ? = ''
-            OR p.title LIKE ?
-            OR p.content LIKE ?
-            OR p.format LIKE ?
+            %s = ''
+            OR p.title LIKE %s
+            OR p.content LIKE %s
+            OR p.format LIKE %s
           )
-        ORDER BY datetime(p.updated_at) DESC
+        ORDER BY p.updated_at DESC
         """,
         (user_id, user_id, query, query_sql, query_sql, query_sql),
     ).fetchall()
     return [project_row_to_dict(conn, row) for row in rows]
 
 
-def get_project(conn: sqlite3.Connection, user_id: str, project_id: str) -> dict[str, Any] | None:
+def get_project(conn: Any, user_id: str, project_id: str) -> dict[str, Any] | None:
     row = get_accessible_project(conn, user_id, project_id)
     if row is None:
         return None
     return project_row_to_dict(conn, row)
 
 
-def create_project(conn: sqlite3.Connection, payload: dict[str, Any]) -> dict[str, Any]:
+def create_project(conn: Any, payload: dict[str, Any]) -> dict[str, Any]:
     user_id = str(payload.get("userId", "")).strip()
     title = str(payload.get("title", "")).strip()
     fmt = str(payload.get("format", "")).strip()
@@ -958,7 +951,7 @@ def create_project(conn: sqlite3.Connection, payload: dict[str, Any]) -> dict[st
     conn.execute(
         """
         INSERT INTO projects (id, owner_id, title, format, content, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s, %s, %s)
         """,
         (project_id, user_id, title, fmt, content, updated_at),
     )
@@ -981,7 +974,7 @@ def create_project(conn: sqlite3.Connection, payload: dict[str, Any]) -> dict[st
     return project
 
 
-def update_project(conn: sqlite3.Connection, payload: dict[str, Any]) -> dict[str, Any]:
+def update_project(conn: Any, payload: dict[str, Any]) -> dict[str, Any]:
     user_id = str(payload.get("userId", "")).strip()
     project_id = str(payload.get("id", "")).strip()
     if not user_id:
@@ -1014,8 +1007,8 @@ def update_project(conn: sqlite3.Connection, payload: dict[str, Any]) -> dict[st
     conn.execute(
         """
         UPDATE projects
-        SET title = ?, format = ?, content = ?, updated_at = ?
-        WHERE id = ?
+        SET title = %s, format = %s, content = %s, updated_at = %s
+        WHERE id = %s
         """,
         (title, fmt, content, now_iso(), project_id),
     )
@@ -1038,7 +1031,7 @@ def update_project(conn: sqlite3.Connection, payload: dict[str, Any]) -> dict[st
     return updated
 
 
-def delete_project(conn: sqlite3.Connection, payload: dict[str, Any]) -> dict[str, Any]:
+def delete_project(conn: Any, payload: dict[str, Any]) -> dict[str, Any]:
     user_id = str(payload.get("userId", "")).strip()
     project_id = str(payload.get("id", "")).strip()
     if not user_id:
@@ -1047,7 +1040,7 @@ def delete_project(conn: sqlite3.Connection, payload: dict[str, Any]) -> dict[st
         raise ValueError("Missing required field: id")
 
     project = conn.execute(
-        "SELECT id, owner_id FROM projects WHERE id = ?",
+        "SELECT id, owner_id FROM projects WHERE id = %s",
         (project_id,),
     ).fetchone()
     if project is None:
@@ -1055,12 +1048,12 @@ def delete_project(conn: sqlite3.Connection, payload: dict[str, Any]) -> dict[st
     if project["owner_id"] != user_id:
         raise ValueError("Only the project owner can delete this project.")
 
-    conn.execute("DELETE FROM projects WHERE id = ?", (project_id,))
+    conn.execute("DELETE FROM projects WHERE id = %s", (project_id,))
     conn.commit()
     return {"deleted": True, "id": project_id}
 
 
-def add_collaborator(conn: sqlite3.Connection, payload: dict[str, Any]) -> dict[str, Any]:
+def add_collaborator(conn: Any, payload: dict[str, Any]) -> dict[str, Any]:
     user_id = str(payload.get("userId", "")).strip()
     project_id = str(payload.get("projectId", "")).strip()
     email = str(payload.get("email", "")).strip().lower()
@@ -1074,7 +1067,7 @@ def add_collaborator(conn: sqlite3.Connection, payload: dict[str, Any]) -> dict[
         raise ValueError("Project not found")
 
     invitee_user = conn.execute(
-        "SELECT id, name, email FROM users WHERE lower(email) = lower(?)",
+        "SELECT id, name, email FROM users WHERE lower(email) = lower(%s)",
         (email,),
     ).fetchone()
     if invitee_user and invitee_user["id"] == project["owner_id"]:
@@ -1084,7 +1077,7 @@ def add_collaborator(conn: sqlite3.Connection, payload: dict[str, Any]) -> dict[
         membership = conn.execute(
             """
             SELECT 1 FROM project_members
-            WHERE project_id = ? AND user_id = ?
+            WHERE project_id = %s AND user_id = %s
             """,
             (project_id, invitee_user["id"]),
         ).fetchone()
@@ -1094,7 +1087,7 @@ def add_collaborator(conn: sqlite3.Connection, payload: dict[str, Any]) -> dict[
     existing_pending = conn.execute(
         """
         SELECT id FROM project_invitations
-        WHERE project_id = ? AND lower(invite_email) = lower(?) AND status = 'pending'
+        WHERE project_id = %s AND lower(invite_email) = lower(%s) AND status = 'pending'
         """,
         (project_id, email),
     ).fetchone()
@@ -1107,7 +1100,7 @@ def add_collaborator(conn: sqlite3.Connection, payload: dict[str, Any]) -> dict[
         INSERT INTO project_invitations (
           id, project_id, inviter_user_id, invite_email, status, created_at
         )
-        VALUES (?, ?, ?, ?, 'pending', ?)
+        VALUES (%s, %s, %s, %s, 'pending', %s)
         """,
         (invitation_id, project_id, user_id, email, now_iso()),
     )
@@ -1119,16 +1112,16 @@ def add_collaborator(conn: sqlite3.Connection, payload: dict[str, Any]) -> dict[
         "status": "pending",
     }
     conn.execute(
-        "UPDATE projects SET updated_at = ? WHERE id = ?",
+        "UPDATE projects SET updated_at = %s WHERE id = %s",
         (now_iso(), project_id),
     )
     conn.commit()
     return collaborator
 
 
-def list_invitations(conn: sqlite3.Connection, user_id: str) -> list[dict[str, Any]]:
+def list_invitations(conn: Any, user_id: str) -> list[dict[str, Any]]:
     user = conn.execute(
-        "SELECT id, email FROM users WHERE id = ?",
+        "SELECT id, email FROM users WHERE id = %s",
         (user_id,),
     ).fetchone()
     if user is None:
@@ -1150,9 +1143,9 @@ def list_invitations(conn: sqlite3.Connection, user_id: str) -> list[dict[str, A
         FROM project_invitations i
         INNER JOIN projects p ON p.id = i.project_id
         INNER JOIN users u ON u.id = i.inviter_user_id
-        WHERE lower(i.invite_email) = lower(?)
+        WHERE lower(i.invite_email) = lower(%s)
           AND i.status = 'pending'
-        ORDER BY datetime(i.created_at) DESC
+        ORDER BY i.created_at DESC
         """,
         (user["email"],),
     ).fetchall()
@@ -1176,7 +1169,7 @@ def list_invitations(conn: sqlite3.Connection, user_id: str) -> list[dict[str, A
     ]
 
 
-def respond_invitation(conn: sqlite3.Connection, payload: dict[str, Any]) -> dict[str, Any]:
+def respond_invitation(conn: Any, payload: dict[str, Any]) -> dict[str, Any]:
     user_id = str(payload.get("userId", "")).strip()
     invitation_id = str(payload.get("invitationId", "")).strip()
     decision = str(payload.get("decision", "")).strip().lower()
@@ -1189,7 +1182,7 @@ def respond_invitation(conn: sqlite3.Connection, payload: dict[str, Any]) -> dic
         raise ValueError("Invalid decision. Expected 'accept' or 'deny'.")
 
     user = conn.execute(
-        "SELECT id, email FROM users WHERE id = ?",
+        "SELECT id, email FROM users WHERE id = %s",
         (user_id,),
     ).fetchone()
     if user is None:
@@ -1199,7 +1192,7 @@ def respond_invitation(conn: sqlite3.Connection, payload: dict[str, Any]) -> dic
         """
         SELECT id, project_id, inviter_user_id, invite_email, status
         FROM project_invitations
-        WHERE id = ?
+        WHERE id = %s
         """,
         (invitation_id,),
     ).fetchone()
@@ -1211,14 +1204,15 @@ def respond_invitation(conn: sqlite3.Connection, payload: dict[str, Any]) -> dic
 
     if decision == "accept":
         owner_row = conn.execute(
-            "SELECT owner_id FROM projects WHERE id = ?",
+            "SELECT owner_id FROM projects WHERE id = %s",
             (invitation["project_id"],),
         ).fetchone()
         if owner_row and owner_row["owner_id"] != user_id:
             conn.execute(
                 """
-                INSERT OR IGNORE INTO project_members (project_id, user_id, added_by_user_id, added_at)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO project_members (project_id, user_id, added_by_user_id, added_at)
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT DO NOTHING
                 """,
                 (
                     invitation["project_id"],
@@ -1230,8 +1224,8 @@ def respond_invitation(conn: sqlite3.Connection, payload: dict[str, Any]) -> dic
         conn.execute(
             """
             UPDATE project_invitations
-            SET status = 'accepted', accepted_at = ?
-            WHERE id = ?
+            SET status = 'accepted', accepted_at = %s
+            WHERE id = %s
             """,
             (now_iso(), invitation_id),
         )
@@ -1240,7 +1234,7 @@ def respond_invitation(conn: sqlite3.Connection, payload: dict[str, Any]) -> dic
 
     # Deny: remove pending invitation.
     conn.execute(
-        "DELETE FROM project_invitations WHERE id = ?",
+        "DELETE FROM project_invitations WHERE id = %s",
         (invitation_id,),
     )
     conn.commit()
@@ -1248,7 +1242,7 @@ def respond_invitation(conn: sqlite3.Connection, payload: dict[str, Any]) -> dic
 
 
 def list_project_versions(
-    conn: sqlite3.Connection, user_id: str, project_id: str
+    conn: Any, user_id: str, project_id: str
 ) -> list[dict[str, Any]]:
     if get_accessible_project(conn, user_id, project_id) is None:
         raise ValueError("Project not found")
@@ -1269,8 +1263,8 @@ def list_project_versions(
           u.email AS actor_email
         FROM project_versions pv
         INNER JOIN users u ON u.id = pv.actor_user_id
-        WHERE pv.project_id = ?
-        ORDER BY datetime(pv.created_at) DESC
+        WHERE pv.project_id = %s
+        ORDER BY pv.created_at DESC
         """,
         (project_id,),
     ).fetchall()
@@ -1297,7 +1291,7 @@ def list_project_versions(
     return versions
 
 
-def revert_project_version(conn: sqlite3.Connection, payload: dict[str, Any]) -> dict[str, Any]:
+def revert_project_version(conn: Any, payload: dict[str, Any]) -> dict[str, Any]:
     user_id = str(payload.get("userId", "")).strip()
     project_id = str(payload.get("projectId", "")).strip()
     version_id = str(payload.get("versionId", "")).strip()
@@ -1314,7 +1308,7 @@ def revert_project_version(conn: sqlite3.Connection, payload: dict[str, Any]) ->
         """
         SELECT id, snapshot_title, snapshot_format, snapshot_content
         FROM project_versions
-        WHERE id = ? AND project_id = ?
+        WHERE id = %s AND project_id = %s
         """,
         (version_id, project_id),
     ).fetchone()
@@ -1324,8 +1318,8 @@ def revert_project_version(conn: sqlite3.Connection, payload: dict[str, Any]) ->
     conn.execute(
         """
         UPDATE projects
-        SET title = ?, format = ?, content = ?, updated_at = ?
-        WHERE id = ?
+        SET title = %s, format = %s, content = %s, updated_at = %s
+        WHERE id = %s
         """,
         (
             version["snapshot_title"],
@@ -1355,7 +1349,7 @@ def revert_project_version(conn: sqlite3.Connection, payload: dict[str, Any]) ->
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="SQLite service for Previo")
+    parser = argparse.ArgumentParser(description="PostgreSQL service for Previo")
     parser.add_argument("--action", required=True)
     parser.add_argument("--stdin", action="store_true")
     return parser.parse_args()

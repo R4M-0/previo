@@ -15,9 +15,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-# Ensure the data directory exists for SQLite
-RUN mkdir -p /app/backend/data
-
 # Utility image for running backend scripts directly, e.g.:
-# docker run --rm -it <image> python3 db/sqlite_service.py --action list_projects
-CMD ["python3", "db/sqlite_service.py", "--help"]
+# docker run --rm -it <image> python3 db/postgres_service.py --action list_projects
+CMD ["python3", "db/postgres_service.py", "--help"]
