@@ -92,6 +92,8 @@ PREVIO_DATABASE_URL=postgresql://previo:previo@postgres:5432/previo
 
 ## Run
 
+### Local development (without Docker)
+
 ```bash
 cd ui
 npm run dev
@@ -99,15 +101,33 @@ npm run dev
 
 Open `http://localhost:3000`.
 
-## Run with Docker
+### Development with Docker (with hot-reload)
 
 ```bash
-docker compose up --build
+docker compose up
 ```
 
 Open `http://localhost:3000`.
 
-Notes:
+**How it works:**
+- `docker-compose.override.yml` automatically merges with `docker-compose.yml` (uses `Dockerfile.dev`)
+- Source code is bind-mounted (`./ui` and `./backend`), so changes trigger Next.js hot-reload instantly
+- No rebuild needed when you edit code — only when you add dependencies
+- `node_modules` lives in a named volume to avoid conflicts with your host machine
+
+**Adding dependencies during development:**
+- JavaScript: `docker compose exec ui npm install <package>`
+- Python: `docker compose exec ui pip install <package>` (then rebuild: `docker compose build ui`)
+
+### Production build with Docker
+
+```bash
+docker compose -f docker-compose.yml up --build
+```
+
+This skips the override file and uses the multi-stage production `Dockerfile`.
+
+**Notes:**
 - The UI container runs Next.js and invokes Python backend scripts locally.
 - PostgreSQL data is persisted in the `postgres_data` Docker volume.
 

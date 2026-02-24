@@ -1,0 +1,28 @@
+# ---------- DEV-ONLY image (no multi-stage build needed) ----------
+FROM node:20-bookworm-slim
+
+# System deps needed by the backend scripts spawned from API routes
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 \
+    python3-pip \
+    texlive-latex-base \
+    texlive-latex-recommended \
+    texlive-latex-extra \
+    texlive-fonts-recommended \
+    texlive-fonts-extra \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app/ui
+
+# Install JS dependencies (they live in a named volume, so this only runs on first build)
+COPY ui/package.json ui/package-lock.json ./
+RUN npm ci
+
+# Install backend Python dependencies
+COPY backend/requirements.txt /tmp/backend-requirements.txt
+RUN python3 -m pip install --no-cache-dir --break-system-packages -r /tmp/backend-requirements.txt \
+    && rm -f /tmp/backend-requirements.txt
+
+EXPOSE 3000
+
+CMD ["npm", "run", "dev"]
