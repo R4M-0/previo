@@ -67,6 +67,10 @@ POSTGRES_USER=previo
 POSTGRES_PASSWORD=previo
 PREVIO_DATABASE_URL=postgresql://previo:previo@postgres:5432/previo
 NEXT_PUBLIC_APP_URL=http://localhost:3000
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+GITHUB_CLIENT_ID=
+GITHUB_CLIENT_SECRET=
 ```
 
 For local non-Docker UI runs, create `ui/.env.local`:
@@ -113,6 +117,10 @@ Configure these in provider dashboards:
 
 - Google: `http://localhost:3000/api/auth/oauth/google/callback`
 - GitHub: `http://localhost:3000/api/auth/oauth/github/callback`
+
+Important:
+- Use a single host consistently during OAuth (`localhost` recommended).
+- If you use `127.0.0.1`, register callback URLs for that host as well.
 
 ## Main Features
 

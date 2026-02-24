@@ -20,6 +20,7 @@ Python backend services used by the Next.js UI.
 - Python 3.10+
 - PostgreSQL 14+
 - LaTeX compiler (`pdflatex`) for LaTeX render/preview
+- `PREVIO_DATABASE_URL` (or `DATABASE_URL`) environment variable for DB access
 
 Install dependencies:
 
@@ -42,6 +43,12 @@ Example:
 ```bash
 echo '{"email":"omar@previo.app","password":"Password1"}' \
   | python3 backend/db/postgres_service.py --action login --stdin
+```
+
+Example connection string:
+
+```env
+PREVIO_DATABASE_URL=postgresql://previo:previo@localhost:5432/previo
 ```
 
 Key actions include:

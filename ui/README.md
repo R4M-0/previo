@@ -24,6 +24,7 @@ GITHUB_CLIENT_ID=...
 GITHUB_CLIENT_SECRET=...
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 APP_URL=http://localhost:3000
+PREVIO_DATABASE_URL=postgresql://previo:previo@localhost:5432/previo
 ```
 
 Run:
@@ -45,6 +46,7 @@ docker compose up --build
 Notes:
 - `ui/Dockerfile` builds Next.js in standalone mode and runs Node + Python + LaTeX tooling in one container.
 - Backend scripts are mounted at `/app/backend` and called by API routes.
+- Docker Compose reads DB and OAuth credentials from root `.env`.
 
 ## Main UI Features
 
@@ -93,3 +95,4 @@ Notes:
 - UI depends on Python backend scripts in `../backend`.
 - Restart dev server after changing `.env.local`.
 - Next 15 note: pages using `useSearchParams` must be wrapped in a Suspense boundary (already applied for `/login`).
+- For OAuth, use one host consistently (`http://localhost:3000` recommended).
