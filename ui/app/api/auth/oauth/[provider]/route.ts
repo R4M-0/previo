@@ -2,10 +2,7 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { buildOAuthStartUrl, isOAuthProvider } from "@/lib/server/oauth";
 import { OAUTH_NEXT_COOKIE, OAUTH_STATE_COOKIE } from "@/lib/server/auth";
-
-function randomState(): string {
-  return `${crypto.randomUUID()}-${Date.now()}`;
-}
+import { createOAuthState } from "@/lib/server/oauth-state";
 
 export async function GET(
   request: Request,
@@ -19,7 +16,7 @@ export async function GET(
 
     const requestUrl = new URL(request.url);
     const nextPath = requestUrl.searchParams.get("next") || "/dashboard";
-    const state = randomState();
+    const state = createOAuthState(nextPath);
     const redirectUrl = buildOAuthStartUrl(request, provider, state);
 
     const store = await cookies();
@@ -44,4 +41,3 @@ export async function GET(
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
-

@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { AUTH_COOKIE_NAME, OAUTH_NEXT_COOKIE, OAUTH_STATE_COOKIE } from "@/lib/server/auth";
 import { oauthLogin } from "@/lib/server/db";
 import { getOAuthProfileFromCode, isOAuthProvider } from "@/lib/server/oauth";
+import { consumeOAuthState } from "@/lib/server/oauth-state";
 
 function buildRedirect(base: string, path: string): string {
   const safePath = path.startsWith("/") ? path : "/dashboard";
@@ -14,16 +15,22 @@ export async function GET(
   context: { params: Promise<{ provider: string }> }
 ) {
   const requestUrl = new URL(request.url);
-  const base = `${requestUrl.protocol}//${requestUrl.host}`;
+  const host =
+    requestUrl.hostname === "0.0.0.0"
+      ? `localhost${requestUrl.port ? `:${requestUrl.port}` : ""}`
+      : requestUrl.host;
+  const base = `${requestUrl.protocol}//${host}`;
   const code = requestUrl.searchParams.get("code") || "";
   const state = requestUrl.searchParams.get("state") || "";
   const oauthError = requestUrl.searchParams.get("error");
 
   const store = await cookies();
   const expectedState = store.get(OAUTH_STATE_COOKIE)?.value || "";
-  const nextPath = store.get(OAUTH_NEXT_COOKIE)?.value || "/dashboard";
+  const cookieNextPath = store.get(OAUTH_NEXT_COOKIE)?.value || "/dashboard";
   store.delete(OAUTH_STATE_COOKIE);
   store.delete(OAUTH_NEXT_COOKIE);
+  const storedNextPath = state ? consumeOAuthState(state) : null;
+  const nextPath = storedNextPath || cookieNextPath;
 
   const fail = (message: string) => {
     const loginUrl = new URL(`${base}/login`);
@@ -39,7 +46,10 @@ export async function GET(
     if (oauthError) {
       return fail(`OAuth failed: ${oauthError}`);
     }
-    if (!code || !state || !expectedState || state !== expectedState) {
+    const stateOk = Boolean(
+      state && (storedNextPath !== null || (expectedState && state === expectedState))
+    );
+    if (!code || !stateOk) {
       return fail("Invalid OAuth state.");
     }
 
@@ -64,4 +74,3 @@ export async function GET(
     return fail(message);
   }
 }
-

@@ -16,7 +16,13 @@ async function clearSession(request: Request): Promise<NextResponse> {
   }
 
   store.delete(AUTH_COOKIE_NAME);
-  return NextResponse.redirect(new URL("/login", request.url));
+  const requestUrl = new URL(request.url);
+  if (requestUrl.hostname === "0.0.0.0") {
+    requestUrl.hostname = "localhost";
+  }
+  requestUrl.pathname = "/login";
+  requestUrl.search = "";
+  return NextResponse.redirect(requestUrl);
 }
 
 export async function GET(request: Request) {

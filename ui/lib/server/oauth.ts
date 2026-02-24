@@ -35,12 +35,10 @@ function requireOAuthConfig(config: OAuthProviderConfig, provider: OAuthProvider
 }
 
 function getBaseUrl(request: Request): string {
-  const envUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL;
-  if (envUrl) {
-    return envUrl.replace(/\/+$/, "");
-  }
   const url = new URL(request.url);
-  return `${url.protocol}//${url.host}`;
+  const host = url.hostname === "0.0.0.0" ? "localhost" : url.hostname;
+  const port = url.port ? `:${url.port}` : "";
+  return `${url.protocol}//${host}${port}`;
 }
 
 export function buildOAuthStartUrl(
@@ -51,16 +49,16 @@ export function buildOAuthStartUrl(
   const config = getProviderConfig(provider);
   requireOAuthConfig(config, provider);
   const baseUrl = getBaseUrl(request);
-  const redirectUri = `${baseUrl}/api/auth/oauth/${provider}/callback`;
 
   const params = new URLSearchParams({
     client_id: config.clientId,
-    redirect_uri: redirectUri,
     response_type: "code",
     scope: config.scopes.join(" "),
     state,
   });
   if (provider === "google") {
+    const redirectUri = `${baseUrl}/api/auth/oauth/${provider}/callback`;
+    params.set("redirect_uri", redirectUri);
     params.set("access_type", "offline");
     params.set("prompt", "consent");
   }
@@ -74,8 +72,17 @@ async function exchangeCodeForToken(
 ): Promise<string> {
   const config = getProviderConfig(provider);
   requireOAuthConfig(config, provider);
-  const baseUrl = getBaseUrl(request);
-  const redirectUri = `${baseUrl}/api/auth/oauth/${provider}/callback`;
+  const tokenParams = new URLSearchParams({
+    client_id: config.clientId,
+    client_secret: config.clientSecret,
+    code,
+    grant_type: "authorization_code",
+  });
+  if (provider === "google") {
+    const baseUrl = getBaseUrl(request);
+    const redirectUri = `${baseUrl}/api/auth/oauth/${provider}/callback`;
+    tokenParams.set("redirect_uri", redirectUri);
+  }
 
   const response = await fetch(config.tokenUrl, {
     method: "POST",
@@ -83,13 +90,7 @@ async function exchangeCodeForToken(
       "Content-Type": "application/x-www-form-urlencoded",
       Accept: "application/json",
     },
-    body: new URLSearchParams({
-      client_id: config.clientId,
-      client_secret: config.clientSecret,
-      code,
-      redirect_uri: redirectUri,
-      grant_type: "authorization_code",
-    }).toString(),
+    body: tokenParams.toString(),
   });
 
   const data = (await response.json()) as { access_token?: string; error?: string };
@@ -176,4 +177,3 @@ export async function getOAuthProfileFromCode(
 export function isOAuthProvider(value: string): value is OAuthProvider {
   return value === "google" || value === "github";
 }
-
