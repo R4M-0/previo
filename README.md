@@ -4,6 +4,8 @@
 Collaborative Markdown + LaTeX writing platform with:
 - real authentication (email/password + Google + GitHub OAuth)
 - PostgreSQL-backed projects and collaboration
+- per-project workspace for uploaded images/files
+- import `.md` / `.tex` files directly as new projects
 - live preview/rendering (Markdown + LaTeX)
 - version history with revert
 - invitation workflow (accept/deny)
@@ -30,6 +32,9 @@ previo/
     ├── lib/                       # server/client utilities
     ├── types/                     # shared TS types
     └── package.json
+├── bin/
+│   └── previo.js                 # Cross-platform CLI: `previo start|stop`
+└── package.json                  # CLI package manifest (for `npm link`)
 ```
 
 ## Requirements
@@ -56,6 +61,19 @@ pip install -r backend/requirements.txt
 ```bash
 cd ui
 npm install
+```
+
+### 2b. Install the `previo` command
+
+```bash
+npm link
+```
+
+This exposes the cross-platform command:
+
+```bash
+previo start 3000
+previo stop
 ```
 
 ### 3. Environment variables
@@ -110,6 +128,18 @@ docker compose up
 
 Open `http://localhost:3000`.
 
+### Start/Stop via CLI (Windows/macOS/Linux)
+
+```bash
+previo start 3000
+```
+
+To stop:
+
+```bash
+previo stop
+```
+
 **How it works:**
 - `docker-compose.override.yml` automatically merges with `docker-compose.yml` (uses `Dockerfile.dev`)
 - Source code is bind-mounted (`./ui` and `./backend`), so changes trigger Next.js hot-reload instantly
@@ -151,6 +181,8 @@ Important:
   - Session cookie auth
 - Projects:
   - Create/edit markdown and latex docs
+  - Import `.md` / `.tex` files as projects
+  - Per-project workspace for uploaded files and images
   - Search projects by title/content/format
   - Delete owned projects from dashboard
 - Collaboration:
@@ -177,3 +209,4 @@ Important:
 - If you change DB schema logic, restart the app and re-run flows to verify migration paths.
 - Rotate OAuth secrets if they were shared in plain text.
 - For production images, `ui/next.config.js` is configured with `output: "standalone"`.
+- Workspace files are stored in `PREVIO_WORKSPACES_DIR` (default: `ui/.workspaces` locally, `/app/workspaces` in Docker).

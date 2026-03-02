@@ -46,7 +46,9 @@ RUN python3 -m pip install --no-cache-dir --break-system-packages -r /tmp/backen
     && rm -f /tmp/backend-requirements.txt
 
 RUN mkdir -p /app/backend \
-    && chown -R node:node /app/backend
+    && mkdir -p /app/workspaces \
+    && chown -R node:node /app/backend \
+    && chown -R node:node /app/workspaces
 
 USER node
 

@@ -92,4 +92,5 @@ cat sample.tex | python3 backend/latex/latex_renderer.py --stdin --output-file /
 - PostgreSQL migrations run automatically inside `postgres_service.py`.
 - OAuth credentials are read by the UI layer (Next.js routes), not by these Python scripts directly.
 - `update_project` accepts optional `comment`; when provided it becomes the version `changeSummary`.
+- `create_project` accepts optional `content`; when provided (for imports), it overrides template-generated starter content.
 - In Docker, scripts run from the UI container runtime (not as a separate backend service).

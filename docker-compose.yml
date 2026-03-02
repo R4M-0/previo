@@ -26,11 +26,12 @@ services:
       postgres:
         condition: service_healthy
     ports:
-      - "3000:3000"
+      - "${PREVIO_PORT:-3000}:3000"
     volumes:
       # Mount backend scripts so the UI can spawn them via child_process.
       # Resolves to /app/backend inside the container (../backend relative to /app/ui).
       - ./backend:/app/backend
+      - workspaces_data:/app/workspaces
     environment:
       NODE_ENV: production
       # Public app URL used for OAuth redirect URIs
@@ -42,7 +43,9 @@ services:
       GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
       GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
       PREVIO_DATABASE_URL: ${PREVIO_DATABASE_URL}
+      PREVIO_WORKSPACES_DIR: /app/workspaces
     restart: unless-stopped
 
 volumes:
   postgres_data:
+  workspaces_data:

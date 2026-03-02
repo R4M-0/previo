@@ -8,10 +8,13 @@ services:
     volumes:
       - ./ui:/app/ui                          # live-reload: source code
       - ./backend:/app/backend                # backend scripts
+      - workspaces_data:/app/workspaces       # project workspaces
       - ui_node_modules:/app/ui/node_modules  # keep node_modules in a volume
     environment:
       NODE_ENV: development
+      PREVIO_WORKSPACES_DIR: /app/workspaces
     command: npm run dev
 
 volumes:
   ui_node_modules:
+  workspaces_data:
