@@ -10,14 +10,86 @@ Usage examples:
 from __future__ import annotations
 
 import argparse
+import os
+import re
 import shutil
 import subprocess
 import tempfile
 from pathlib import Path
+from urllib.parse import parse_qs, unquote, urlparse
 
 
 class LatexRenderError(RuntimeError):
     """Raised when LaTeX compilation fails."""
+
+
+def sanitize_latex_source(latex_source: str) -> str:
+    """
+    Normalize common placeholder float options copied from templates/docs.
+    """
+    replacements = [
+        (r"\\begin\{figure\}\[\s*placement specifier\s*\]", r"\\begin{figure}[htbp]"),
+        (r"\\begin\{table\}\[\s*placement specifier\s*\]", r"\\begin{table}[htbp]"),
+        (r"\\begin\{figure\}\[\s*position\s*\]", r"\\begin{figure}[htbp]"),
+        (r"\\begin\{table\}\[\s*position\s*\]", r"\\begin{table}[htbp]"),
+        (r"\\includegraphics\[\s*options\s*\]\{", r"\\includegraphics{"),
+    ]
+    output = latex_source
+    for pattern, replacement in replacements:
+        output = re.sub(pattern, replacement, output, flags=re.IGNORECASE)
+    return output
+
+
+def workspace_root_path() -> Path:
+    configured = os.getenv("PREVIO_WORKSPACES_DIR", "").strip()
+    if configured:
+        return Path(configured).resolve()
+    return (Path.cwd() / ".workspaces").resolve()
+
+
+def resolve_workspace_asset_path(raw: str) -> Path | None:
+    parsed = urlparse(raw)
+    path_value = parsed.path or raw
+    match = re.match(r"^/api/projects/([^/]+)/workspace/file$", path_value)
+    if not match:
+        return None
+
+    project_id = match.group(1)
+    query = parse_qs(parsed.query)
+    relative = query.get("path", [None])[0]
+    if not relative:
+        return None
+
+    project_root = (workspace_root_path() / project_id).resolve()
+    candidate = (project_root / unquote(relative)).resolve()
+    project_prefix = str(project_root) + os.sep
+    if str(candidate) != str(project_root) and not str(candidate).startswith(project_prefix):
+        return None
+    if not candidate.is_file():
+        return None
+    return candidate
+
+
+def materialize_workspace_assets(latex_source: str, temp_dir: Path) -> str:
+    include_re = re.compile(r"(\\includegraphics(?:\[[^\]]*\])?\{)([^{}]+)(\})")
+    assets_dir = temp_dir / "workspace-assets"
+    copied_count = 0
+
+    def repl(match: re.Match[str]) -> str:
+        nonlocal copied_count
+        raw_path = match.group(2).strip()
+        asset = resolve_workspace_asset_path(raw_path)
+        if asset is None:
+            return match.group(0)
+        copied_count += 1
+        assets_dir.mkdir(parents=True, exist_ok=True)
+        ext = asset.suffix or ".bin"
+        dest_name = f"asset_{copied_count}{ext.lower()}"
+        dest = assets_dir / dest_name
+        shutil.copy2(asset, dest)
+        return f"{match.group(1)}workspace-assets/{dest_name}{match.group(3)}"
+
+    return include_re.sub(repl, latex_source)
 
 
 def read_text_with_fallback(path: Path) -> str:
@@ -62,7 +134,9 @@ def render_latex_to_pdf(
     with tempfile.TemporaryDirectory(prefix="previo-latex-") as tmp_dir:
         tmp_path = Path(tmp_dir)
         tex_path = tmp_path / "document.tex"
-        tex_path.write_text(latex_source, encoding="utf-8")
+        prepared = sanitize_latex_source(latex_source)
+        prepared = materialize_workspace_assets(prepared, tmp_path)
+        tex_path.write_text(prepared, encoding="utf-8")
 
         cmd = [
             compiler,

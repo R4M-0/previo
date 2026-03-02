@@ -935,6 +935,7 @@ def create_project(conn: Any, payload: dict[str, Any]) -> dict[str, Any]:
     title = str(payload.get("title", "")).strip()
     fmt = str(payload.get("format", "")).strip()
     template = str(payload.get("template", "blank")).strip().lower()
+    initial_content = payload.get("content")
     if not user_id:
         raise ValueError("Missing required field: userId")
     if not title:
@@ -943,9 +944,13 @@ def create_project(conn: Any, payload: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("Invalid format. Expected 'markdown' or 'latex'.")
     if template not in ("blank", "thesis", "report", "api_docs", "article"):
         raise ValueError("Invalid template.")
+    if initial_content is not None and not isinstance(initial_content, str):
+        raise ValueError("Invalid content.")
 
     project_id = f"p_{uuid.uuid4().hex[:8]}"
-    content = template_content(fmt, template, title)
+    content = (
+        initial_content if isinstance(initial_content, str) else template_content(fmt, template, title)
+    )
     updated_at = now_iso()
 
     conn.execute(

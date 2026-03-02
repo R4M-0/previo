@@ -85,9 +85,10 @@ export async function createProject(
   userId: string,
   title: string,
   format: "markdown" | "latex",
-  template: ProjectTemplate = "blank"
+  template: ProjectTemplate = "blank",
+  content?: string
 ): Promise<Project> {
-  return runDbAction<Project>("create_project", { userId, title, format, template });
+  return runDbAction<Project>("create_project", { userId, title, format, template, content });
 }
 
 export async function updateProject(input: {

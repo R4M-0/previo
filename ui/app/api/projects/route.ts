@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createProject, listProjects } from "@/lib/server/db";
 import { requireAuthUser } from "@/lib/server/auth";
+import { ensureProjectWorkspace } from "@/lib/server/workspace";
 import { ProjectTemplate } from "@/types";
 
 export async function GET(request: Request) {
@@ -24,10 +25,12 @@ export async function POST(request: Request) {
       title?: string;
       format?: "markdown" | "latex";
       template?: ProjectTemplate;
+      content?: string;
     };
     const title = typeof body.title === "string" ? body.title.trim() : "";
     const format = body.format;
     const template = body.template ?? "blank";
+    const content = typeof body.content === "string" ? body.content : undefined;
 
     if (!title) {
       return NextResponse.json({ error: "Missing required field: title" }, { status: 400 });
@@ -39,7 +42,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid template" }, { status: 400 });
     }
 
-    const project = await createProject(user.id, title, format, template);
+    const project = await createProject(user.id, title, format, template, content);
+    await ensureProjectWorkspace(project.id);
     return NextResponse.json({ project }, { status: 201 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to create project.";

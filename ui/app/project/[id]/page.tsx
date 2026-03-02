@@ -22,11 +22,13 @@ import {
   AlertCircle,
   History,
   X,
+  FolderOpen,
 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { CollaboratorModal } from "@/components/ui/CollaboratorModal";
+import { WorkspaceModal } from "@/components/ui/WorkspaceModal";
 import { formatRelativeDate } from "@/lib/date";
-import { Collaborator, Project, ProjectVersion } from "@/types";
+import { Collaborator, Project, ProjectVersion, WorkspaceFile } from "@/types";
 
 // ── Resizable divider ─────────────────────────────────────────────────────────
 function ResizeDivider({ onResize }: { onResize: (delta: number) => void }) {
@@ -115,7 +117,11 @@ export default function ProjectEditorPage() {
   const [showCollabModal, setShowCollabModal] = useState(false);
   const [showFormatMenu, setShowFormatMenu] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [showWorkspace, setShowWorkspace] = useState(false);
   const [collaborators, setCollaborators] = useState<Collaborator[]>([]);
+  const [workspaceFiles, setWorkspaceFiles] = useState<WorkspaceFile[]>([]);
+  const [isLoadingWorkspace, setIsLoadingWorkspace] = useState(false);
+  const [isUploadingWorkspaceFile, setIsUploadingWorkspaceFile] = useState(false);
   const [versions, setVersions] = useState<ProjectVersion[]>([]);
   const [isLoadingVersions, setIsLoadingVersions] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
@@ -460,6 +466,60 @@ export default function ProjectEditorPage() {
     }
   }
 
+  async function loadWorkspace() {
+    if (!project) return;
+    setIsLoadingWorkspace(true);
+    try {
+      const response = await fetch(`/api/projects/${project.id}/workspace`, {
+        cache: "no-store",
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to load workspace.");
+      }
+      setWorkspaceFiles((data.files || []) as WorkspaceFile[]);
+    } catch (error) {
+      setPreviewError(error instanceof Error ? error.message : "Failed to load workspace.");
+    } finally {
+      setIsLoadingWorkspace(false);
+    }
+  }
+
+  async function handleUploadWorkspaceFile(file: File) {
+    if (!project) return;
+    setIsUploadingWorkspaceFile(true);
+    try {
+      const form = new FormData();
+      form.set("file", file);
+      const response = await fetch(`/api/projects/${project.id}/workspace`, {
+        method: "POST",
+        body: form,
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to upload file.");
+      }
+      await loadWorkspace();
+    } catch (error) {
+      setPreviewError(error instanceof Error ? error.message : "Failed to upload file.");
+    } finally {
+      setIsUploadingWorkspaceFile(false);
+    }
+  }
+
+  async function handleDeleteWorkspaceFile(filePath: string) {
+    if (!project) return;
+    const response = await fetch(
+      `/api/projects/${project.id}/workspace?path=${encodeURIComponent(filePath)}`,
+      { method: "DELETE" }
+    );
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "Failed to delete file.");
+    }
+    await loadWorkspace();
+  }
+
   const editorPlaceholder =
     format === "markdown"
       ? "# Start writing in Markdown\n\nUse **bold**, _italic_, `code`, and more.\n\n## Headings\n\nCreate structure with `#`, `##`, `###`...\n\n```js\nconsole.log('Hello, Previo!');\n```"
@@ -472,6 +532,12 @@ export default function ProjectEditorPage() {
       void loadVersions();
     }
   }, [showHistory, project?.id]);
+
+  useEffect(() => {
+    if (showWorkspace) {
+      void loadWorkspace();
+    }
+  }, [showWorkspace, project?.id]);
 
   useEffect(() => {
     if (!project?.id || isLoadingProject) return;
@@ -687,6 +753,14 @@ export default function ProjectEditorPage() {
             </button>
 
             <button
+              onClick={() => setShowWorkspace(true)}
+              className="flex items-center gap-1.5 border border-stone-200 text-stone-700 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-stone-50 transition-all"
+            >
+              <FolderOpen className="w-3.5 h-3.5" />
+              Workspace
+            </button>
+
+            <button
               onClick={handleDownload}
               disabled={isDownloadingFile || !content.trim() || isLoadingProject}
               className="flex items-center gap-1.5 border border-stone-200 text-stone-700 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-stone-50 disabled:opacity-50 transition-all"
@@ -814,6 +888,18 @@ export default function ProjectEditorPage() {
           collaborators={collaborators}
           onClose={() => setShowCollabModal(false)}
           onAdd={handleAddCollaborator}
+        />
+      )}
+
+      {showWorkspace && project && (
+        <WorkspaceModal
+          files={workspaceFiles}
+          isLoading={isLoadingWorkspace}
+          isUploading={isUploadingWorkspaceFile}
+          onClose={() => setShowWorkspace(false)}
+          onUpload={handleUploadWorkspaceFile}
+          onDelete={handleDeleteWorkspaceFile}
+          projectId={project.id}
         />
       )}
 

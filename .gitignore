@@ -75,3 +75,6 @@ __pycache__/
 *.py[cod]
 *$py.class
 backend/data/*.db
+.workspaces/
+ui/.workspaces/
+.previo-runtime.json

@@ -59,6 +59,33 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     }
   }
 
+  async function handleImportProject(file: File, title?: string) {
+    try {
+      const body = new FormData();
+      body.set("file", file);
+      if (title) {
+        body.set("title", title);
+      }
+      const response = await fetch("/api/projects/import", {
+        method: "POST",
+        body,
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        if (response.status === 401) {
+          router.push("/login");
+          return;
+        }
+        throw new Error(data.error || "Failed to import project.");
+      }
+
+      setShowNewProject(false);
+      router.push(`/project/${data.project.id}`);
+    } catch (error) {
+      console.error(error);
+    }
+  }
+
   return (
     <AppShellActionsContext.Provider value={actions}>
       <div className="h-screen flex overflow-hidden bg-canvas">
@@ -71,6 +98,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <NewProjectModal
             onClose={() => setShowNewProject(false)}
             onCreate={handleCreateProject}
+            onImport={handleImportProject}
           />
         )}
       </div>

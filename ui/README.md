@@ -55,11 +55,13 @@ Notes:
   - Google and GitHub OAuth
 - Dashboard:
   - Project list + search
+  - New project import from `.md` / `.tex`
   - Invitation notifications with Accept/Deny
   - Detailed writing stats
   - Delete owned projects
 - Editor:
   - Markdown/LaTeX source + preview
+  - Project workspace modal (upload/list/delete/open/copy file URL)
   - Download render (HTML/PDF)
   - Version history + diff + revert
   - Optional save comment before saving (stored in history)
@@ -82,6 +84,9 @@ Notes:
 - API:
   - `/api/auth/*`
   - `/api/projects/*`
+  - `/api/projects/import`
+  - `/api/projects/[id]/workspace`
+  - `/api/projects/[id]/workspace/file`
   - `/api/invitations`
   - `/api/markdown/*`
   - `/api/latex/*`
@@ -93,6 +98,7 @@ Notes:
 ## Notes
 
 - UI depends on Python backend scripts in `../backend`.
+- Workspace files are persisted under `PREVIO_WORKSPACES_DIR` (default local path: `ui/.workspaces`).
 - Restart dev server after changing `.env.local`.
 - Next 15 note: pages using `useSearchParams` must be wrapped in a Suspense boundary (already applied for `/login`).
 - For OAuth, use one host consistently (`http://localhost:3000` recommended).

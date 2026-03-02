@@ -3,7 +3,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { X, Hash, FileCode2, ArrowRight } from "lucide-react";
+import { X, Hash, FileCode2, ArrowRight, Upload } from "lucide-react";
 import { ProjectTemplate } from "@/types";
 
 interface NewProjectModalProps {
@@ -13,12 +13,16 @@ interface NewProjectModalProps {
     format: "markdown" | "latex",
     template: ProjectTemplate
   ) => void;
+  onImport: (file: File, title?: string) => void;
 }
 
-export function NewProjectModal({ onClose, onCreate }: NewProjectModalProps) {
+export function NewProjectModal({ onClose, onCreate, onImport }: NewProjectModalProps) {
   const [title, setTitle] = useState("");
   const [format, setFormat] = useState<"markdown" | "latex">("markdown");
   const [template, setTemplate] = useState<ProjectTemplate>("report");
+  const [mode, setMode] = useState<"new" | "import">("new");
+  const [importTitle, setImportTitle] = useState("");
+  const [importFile, setImportFile] = useState<File | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -32,6 +36,11 @@ export function NewProjectModal({ onClose, onCreate }: NewProjectModalProps) {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (mode === "import") {
+      if (!importFile) return;
+      onImport(importFile, importTitle.trim() || undefined);
+      return;
+    }
     if (!title.trim()) return;
     onCreate(title.trim(), format, template);
   }
@@ -58,6 +67,66 @@ export function NewProjectModal({ onClose, onCreate }: NewProjectModalProps) {
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-5">
+          <div className="grid grid-cols-2 gap-2 rounded-lg bg-stone-100 p-1">
+            <button
+              type="button"
+              onClick={() => setMode("new")}
+              className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+                mode === "new"
+                  ? "bg-white text-ink shadow-sm"
+                  : "text-stone-500 hover:text-ink"
+              }`}
+            >
+              New Project
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode("import")}
+              className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+                mode === "import"
+                  ? "bg-white text-ink shadow-sm"
+                  : "text-stone-500 hover:text-ink"
+              }`}
+            >
+              Import .md/.tex
+            </button>
+          </div>
+
+          {mode === "import" ? (
+            <>
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-stone-500 uppercase tracking-wider">
+                  File
+                </label>
+                <label className="w-full flex items-center gap-3 border border-dashed border-stone-300 rounded-lg px-3.5 py-3 text-sm text-stone-600 hover:border-stone-400 cursor-pointer transition-all">
+                  <Upload className="w-4 h-4" />
+                  <span className="truncate">
+                    {importFile ? importFile.name : "Choose a .md or .tex file"}
+                  </span>
+                  <input
+                    type="file"
+                    accept=".md,.tex,text/markdown,application/x-tex"
+                    className="hidden"
+                    onChange={(e) => setImportFile(e.target.files?.[0] ?? null)}
+                  />
+                </label>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-stone-500 uppercase tracking-wider">
+                  Project title (optional)
+                </label>
+                <input
+                  type="text"
+                  value={importTitle}
+                  onChange={(e) => setImportTitle(e.target.value)}
+                  placeholder="Defaults to the file name"
+                  className="w-full bg-stone-50 border border-stone-200 rounded-lg px-3.5 py-2.5 text-sm text-ink placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-amber-400/40 focus:border-amber-400 transition-all"
+                />
+              </div>
+            </>
+          ) : (
+            <>
           {/* Title */}
           <div className="space-y-2">
             <label className="text-xs font-semibold text-stone-500 uppercase tracking-wider">
@@ -153,6 +222,8 @@ export function NewProjectModal({ onClose, onCreate }: NewProjectModalProps) {
               ))}
             </div>
           </div>
+            </>
+          )}
 
           {/* Actions */}
           <div className="flex gap-3 pt-1">
@@ -165,10 +236,10 @@ export function NewProjectModal({ onClose, onCreate }: NewProjectModalProps) {
             </button>
             <button
               type="submit"
-              disabled={!title.trim()}
+              disabled={mode === "import" ? !importFile : !title.trim()}
               className="flex-1 bg-ink text-white rounded-lg px-4 py-2.5 text-sm font-medium flex items-center justify-center gap-2 hover:bg-stone-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
             >
-              Create
+              {mode === "import" ? "Import" : "Create"}
               <ArrowRight className="w-4 h-4" />
             </button>
           </div>

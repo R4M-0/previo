@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { deleteProject, getProject, updateProject } from "@/lib/server/db";
 import { requireAuthUser } from "@/lib/server/auth";
+import { ensureProjectWorkspace } from "@/lib/server/workspace";
 
 export async function GET(
   _request: Request,
@@ -10,6 +11,7 @@ export async function GET(
     const user = await requireAuthUser();
     const { id } = await context.params;
     const project = await getProject(user.id, id);
+    await ensureProjectWorkspace(project.id);
     return NextResponse.json({ project });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to fetch project.";
