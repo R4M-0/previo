@@ -61,3 +61,10 @@ export interface ProjectInvitation {
     email: string;
   };
 }
+
+export interface WorkspaceFile {
+  path: string;
+  name: string;
+  size: number;
+  updatedAt: string;
+}
