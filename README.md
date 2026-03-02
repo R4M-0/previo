@@ -1,5 +1,6 @@
 # Previo
 
+
 Collaborative Markdown + LaTeX writing platform with:
 - real authentication (email/password + Google + GitHub OAuth)
 - PostgreSQL-backed projects and collaboration
