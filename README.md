@@ -1,9 +1,9 @@
 
 # Previo
 
-[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/omarchiboub/previo)
+[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/R4M-0/previo)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
-[![Stars](https://img.shields.io/github/stars/R4M-0/previo?style=social)](https://github.com/omarchiboub/previo)
+[![Stars](https://img.shields.io/github/stars/R4M-0/previo?style=social)](https://github.com/R4M-0/previo)
 
 Collaborative Markdown + LaTeX writing platform with authentication, project collaboration, version history, and workspace file management.
 
