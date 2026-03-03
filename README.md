@@ -1,11 +1,21 @@
 
-# Previo
+<h1 align="center">Previo</h1>
 
-[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/R4M-0/previo)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
-[![Stars](https://img.shields.io/github/stars/R4M-0/previo?style=social)](https://github.com/R4M-0/previo)
+<p align="center">
+  Collaborative Markdown + LaTeX writing platform
+</p>
 
-Collaborative Markdown + LaTeX writing platform with authentication, project collaboration, version history, and workspace file management.
+<p align="center">
+  <a href="https://github.com/R4M-0/previo">
+    <img src="https://img.shields.io/badge/version-1.0.0-blue.svg" />
+  </a>
+  <a href="./LICENSE">
+    <img src="https://img.shields.io/badge/license-MIT-green.svg" />
+  </a>
+  <a href="https://github.com/R4M-0/previo">
+    <img src="https://img.shields.io/github/stars/R4M-0/previo?style=social" />
+  </a>
+</p>
 
 ---
 
