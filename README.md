@@ -1,6 +1,23 @@
+
 # Previo
 
+[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/omarchiboub/previo)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
+[![Stars](https://img.shields.io/github/stars/R4M-0/previo?style=social)](https://github.com/omarchiboub/previo)
+
 Collaborative Markdown + LaTeX writing platform with authentication, project collaboration, version history, and workspace file management.
+
+---
+
+## ☕ Support the Project
+
+If you find **Previo** useful and want to support its development:
+
+👉 https://buymeacoffee.com/r4m0  
+
+Your support helps maintain and improve the platform ❤️
+
+---
 
 ## Highlights
 
@@ -64,16 +81,16 @@ previo/
 ├── screenshots/
 ├── bin/previo.js
 └── package.json
-```
+````
 
 ## Requirements
 
-- Node.js 18+
-- npm
-- Python 3.10+
-- PostgreSQL 14+ (or Docker Compose)
-- LaTeX compiler (`pdflatex`)
-- Docker + Docker Compose (recommended for full stack)
+* Node.js 18+
+* npm
+* Python 3.10+
+* PostgreSQL 14+ (or Docker Compose)
+* LaTeX compiler (`pdflatex`)
+* Docker + Docker Compose (recommended for full stack)
 
 ## Quick Start (Recommended)
 
@@ -137,14 +154,14 @@ Open `http://localhost:3000`.
 
 ## Docker Notes
 
-- `docker compose up` uses `docker-compose.override.yml` (dev mode with bind mounts)
-- `docker compose -f docker-compose.yml up --build` uses production image
-- Workspace files are persisted in `workspaces_data` and available under `PREVIO_WORKSPACES_DIR`
+* `docker compose up` uses `docker-compose.override.yml` (dev mode with bind mounts)
+* `docker compose -f docker-compose.yml up --build` uses production image
+* Workspace files are persisted in `workspaces_data` and available under `PREVIO_WORKSPACES_DIR`
 
 ## OAuth Callback URLs
 
-- Google: `http://localhost:3000/api/auth/oauth/google/callback`
-- GitHub: `http://localhost:3000/api/auth/oauth/github/callback`
+* Google: `http://localhost:3000/api/auth/oauth/google/callback`
+* GitHub: `http://localhost:3000/api/auth/oauth/github/callback`
 
 Use a consistent host (`localhost` recommended).
 
@@ -152,44 +169,51 @@ Use a consistent host (`localhost` recommended).
 
 ### Auth
 
-- Signup/login with email/password
-- Google OAuth
-- GitHub OAuth
-- Session cookie auth
+* Signup/login with email/password
+* Google OAuth
+* GitHub OAuth
+* Session cookie auth
 
 ### Projects
 
-- Create Markdown or LaTeX projects
-- Import existing `.md` / `.tex`
-- Search by title/content/format
-- Delete owned projects
+* Create Markdown or LaTeX projects
+* Import existing `.md` / `.tex`
+* Search by title/content/format
+* Delete owned projects
 
 ### Collaboration
 
-- Invite collaborators by email
-- Accept or deny invitations
-- Shared editing access for accepted members
-- Remote save sync in open editors
+* Invite collaborators by email
+* Accept or deny invitations
+* Shared editing access for accepted members
+* Remote save sync in open editors
 
 ### Versioning
 
-- Auto snapshot on save
-- Optional save comments
-- Diff viewer for each version
-- Revert to any previous snapshot
+* Auto snapshot on save
+* Optional save comments
+* Diff viewer for each version
+* Revert to any previous snapshot
 
 ### Rendering
 
-- Markdown preview + HTML export
-- LaTeX preview + PDF export
+* Markdown preview + HTML export
+* LaTeX preview + PDF export
 
 ### Workspace
 
-- Per-project file storage
-- Upload/list/open/delete files
-- Use workspace image URLs directly in LaTeX `\\includegraphics{...}`
+* Per-project file storage
+* Upload/list/open/delete files
+* Use workspace image URLs directly in LaTeX `\\includegraphics{...}`
+
+## License
+
+This project is licensed under the MIT License.
+See the `LICENSE` file for details.
 
 ## Additional Docs
 
-- UI: [`ui/README.md`](./ui/README.md)
-- Backend: [`backend/README.md`](./backend/README.md)
+* UI: [`ui/README.md`](./ui/README.md)
+* Backend: [`backend/README.md`](./backend/README.md)
+
+
